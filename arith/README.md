@@ -99,3 +99,25 @@ arith.jsonl also has 3 exploratory p = 0 runs at weight decay 1 and 3; the chart
 - **Earlier result explained.** In the first table, ÷ (3%) and × (12%) were both rare, so neither had a learned partner, and neither was ever learned as a rule.
 
 **Limits.** Seed 0 only, one task. Accuracy jumps between seeds (see the first table), so single points on the frequency chart are noisy; the partner correlation holds across all 56.
+
+## How much rare data does the partner save?
+
+**Question 1.** With the partner fully learned, how few distinct rare examples are enough? The rare op stays at 4% of the batch, but keeps only K of its 4704 training pairs ([few.jsonl](few.jsonl)).
+
+**Question 2.** Without a partner, how common must an operation be to be learned? ([lone.jsonl](lone.jsonl))
+
+![few-shot and lone](../images/arith_few.png)
+
+| distinct rare pairs (partner known, 4% of batch) | 3–100 | 300 | 500–700 | 1000 | 1500+ |
+|---|---|---|---|---|---|
+| rare op held-out (4 runs: 2 orders × Adam 9000 / Muon 3000) | 0.01–0.08 | 0.10–0.19 | 0.10–0.87 | 0.43–0.99 | 0.53–1.00 |
+
+**What it means.**
+
+- **The partner does not make the rare op few-shot.** 3 to 300 pairs are memorized perfectly (train 1.00) and stay at 1–19% held-out. The rule appears between 700 and 1500 distinct pairs, about 15–30% of all possible pairs.
+- **It is all at once, not per number.** With 300 pairs, held-out pairs whose b never appeared in training score 0.23, the same as pairs whose b appeared 3–5 times (0.21) ([per_b.py](per_b.py)). The model does not learn "the negative of 7" one number at a time.
+- **Without the partner, 4% is never enough.** All 4704 pairs, 9000 steps: 1–3% held-out, and not even memorized (train 0.01–0.04). The same op with only 500 pairs is memorized (train 1.00). Many different rare examples are harder to memorize than few.
+- **A lone op needs 16–33% of the batch.** + : 16% (Adam 9000 steps, 0.97). ÷ : 33% (1.00). With a partner, 2–4% was enough: the partner cuts the needed frequency 4–8×.
+- **Muon memorizes rare data more, Adam generalizes it more.** At 4–8%, Muon reaches 0.19–0.89 train accuracy on the lone op, Adam 0.01–0.12. At 16–25% with 9000 steps, Adam learns + (0.97–1.00 held-out), Muon reaches 0.39–0.73.
+
+**Limits.** Seed 0, one task, one Adam learning rate.

@@ -22,6 +22,7 @@ OPT = os.environ.get("OPT", "muon")                       # "adam": AdamW on the
 HID_LR = float(os.environ.get("HID_LR", 0.001))
 CONST = os.environ.get("CONST") == "1"                    # 1: no learning-rate decay
 OUT = os.environ.get("OUT", "arith.jsonl")
+RARE_PAIRS = int(os.environ.get("RARE_PAIRS", 0))         # >0: the last (rarest) op keeps only this many training pairs
 HERE = os.path.dirname(os.path.abspath(__file__))
 OPS = {"+": lambda a, b: (a + b) % N, "-": lambda a, b: (a - b) % N, "*": lambda a, b: (a * b) % N,
        "/": lambda a, b: (a * pow(b, N - 2, N)) % N}
@@ -51,6 +52,8 @@ def data(order, gen):
                              if not (op == "/" and b == 0)])
         rows = rows[torch.randperm(len(rows), generator=gen)]
         tr.append(rows[: len(rows) // 2]); te.append(rows[len(rows) // 2:])
+    if RARE_PAIRS:
+        tr[-1] = tr[-1][:RARE_PAIRS]
     return tr, te
 
 
@@ -116,7 +119,7 @@ def main(p, order, seed):
         torch.save(dict(model=m.state_dict(), tr=tr, te=te, p=p, order=order, seed=seed), os.environ["SAVE"])
         return
     with open(os.path.join(HERE, OUT), "a") as f:
-        f.write(json.dumps(dict(opt=OPT, p=p, order=order, seed=seed, N=N, wd=WD, freq=FREQ, steps=STEPS, const=CONST,
+        f.write(json.dumps(dict(opt=OPT, p=p, order=order, seed=seed, N=N, wd=WD, freq=FREQ, steps=STEPS, const=CONST, rare_pairs=RARE_PAIRS,
                                 hid_lr=HID_LR if OPT == "adam" else None, log=log)) + "\n")
 
 
