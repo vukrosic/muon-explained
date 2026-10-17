@@ -276,6 +276,14 @@ Summary of all 5 rounds:
 
 [Section 4](#4-repeat-5-times) shows the same 5 rounds on our matrix, one picture per round.
 
+**Directions and numbers.** The update matrix has a few directions, our blue and red arrows. Each direction has one number, its strength: how far the update moves the weights along that direction. The 5 rounds never change the directions. They only change the numbers: blue goes 0.981 → 0.722, red goes 0.196 → 0.798.
+
+**Is the goal 1, or 0.68 to 1.20?** The ideal is exactly 1 for every direction: that is U·Vᵀ, both turns with no stretch. Muon settles for 0.68 to 1.20 on purpose.
+
+- **What hurts training is lopsidedness,** a big gap between directions. Before the rounds, red moves 5 times less than blue (0.196 vs 0.981), and in a real weight matrix the gap can be 1000 times. After 5 rounds, every direction is within about 1.7 times of every other (0.68 vs 1.20), so no direction is starved.
+- **Exactly 1 costs more.** A curve that ends exactly at 1 needs a gentler start, like the gentle cubic in step 4, and so more rounds. Each round is 3 matrix multiplications at every training step. Keller Jordan reports that strengths near 1 train as well as exactly 1, so the curve trades exactness for speed.
+- **Where 0.68 and 1.20 come from.** Both are points on the step 5 curve. 1.20 is its top, at s = 0.555. 0.68 is the bottom of its dip, at s = 1.05. A strength between 0.68 and 1.20 comes out of the next round between 0.682 and 1.136, so once a strength is in that range it stays there.
+
 **Where the three numbers come from.** No formula produces them. Keller Jordan, Muon's author, tuned them for this trade-off:
 
 - 3.4445 is the slope at the start: how many times a small strength grows in one round. He made it as large as the next condition allows.
