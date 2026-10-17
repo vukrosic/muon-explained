@@ -6,7 +6,23 @@
 X  ←  3.4445·X  −  4.775·(XXᵀ)X  +  2.0315·(XXᵀ)²X
 ```
 
-This post explains what that formula does, using one small 2×2 matrix and pictures. Every number in the pictures comes from the scripts in this repo.
+An optimizer is the part of training that decides how to change the weights after each batch of data. For years the default has been AdamW. Muon replaces it for the big weight matrices inside the network. The first and last layers and the small vectors still use AdamW.
+
+![Timeline: Schulz 1933, NanoGPT record Oct 2024, blog post Dec 2024, Moonlight Feb 2025, Kimi K2 Jul 2025](images/muon_timeline.png)
+
+Some facts:
+
+- **The name is an acronym.** Muon stands for MomentUm Orthogonalized by Newton–Schulz.
+- **The math is 91 years old.** Schulz published the core trick in 1933, as a way to invert a matrix using only multiplications. Muon uses a tuned version of it.
+- **It started as a speed contest.** In October 2024 Muon set a record in the NanoGPT speedrun, a public race to train a small GPT-2 model to a fixed quality as fast as possible. That training became 1.35 times faster.
+- **It now trains giant models.** Moonshot AI trained Moonlight (16B parameters, 5.7 trillion tokens) with Muon in February 2025. Kimi K2, with 1 trillion parameters and 15.5 trillion tokens, was trained with MuonClip, a Muon variant, in July 2025.
+- **It is cheap.** Muon remembers 1 number per weight, AdamW remembers 2. The 5 rounds of the formula add about 0.7% compute in the NanoGPT speedrun. For a model the size of Llama 405B the estimate is 0.5%.
+
+![Muon in numbers: CIFAR-10 record 3.3 to 2.6 s, 1.5B model 13.3 to 10 h, about half the compute in Moonshot's scaling laws, half the optimizer memory](images/muon_numbers.png)
+
+The first two numbers come from Keller Jordan's post. The third is from Moonshot AI's scaling experiments, where Muon reached the same loss with about half the compute of AdamW. All are reported by their authors, not measured here.
+
+This post explains what the formula does, using one small 2×2 matrix and pictures. Every number in the pictures from section 1 on comes from the scripts in this repo.
 
 ## 1. A matrix stretches space
 
@@ -143,8 +159,12 @@ python3 muon_orth.py      # the 8×8 table above
 python3 teach_size.py     # images/step0_size.png
 python3 teach.py          # images/step1.png … step4.png
 python3 plot_poly.py      # images/poly_plot.png
+python3 intro_plots.py    # images/muon_timeline.png, muon_numbers.png
 ```
 
-## Source
+## Sources
 
-Coefficients 3.4445, −4.775, 2.0315 and Muon itself: Keller Jordan, [Muon: An optimizer for hidden layers in neural networks](https://kellerjordan.github.io/posts/muon/).
+- Muon, its coefficients 3.4445, −4.775, 2.0315, the speedrun, CIFAR-10, 1.5B-model and compute-overhead numbers: Keller Jordan, [Muon: An optimizer for hidden layers in neural networks](https://kellerjordan.github.io/posts/muon/) (December 2024).
+- Moonlight and the 2× compute result: Moonshot AI, [Muon is Scalable for LLM Training](https://arxiv.org/abs/2502.16982) (February 2025).
+- Kimi K2 and MuonClip: Moonshot AI, Kimi K2 technical report (July 2025), as covered by [HPCwire](https://www.hpcwire.com/aiwire/2025/07/14/chinas-moonshot-ai-releases-trillion-parameter-model-kimi-k2/).
+- Schulz, *Iterative Berechnung der reziproken Matrix*, Zeitschrift für Angewandte Mathematik und Mechanik 13 (1933), 57–59.
