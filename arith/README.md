@@ -335,3 +335,23 @@ Resetting the hidden layers fails too: + and − come back within a few hundred 
 **What is known.** "Loss of plasticity" (Dohare et al., Nature 2024) and "critical learning periods" (Achille et al., 2019) describe networks that lose the ability to learn new things, with dead units and falling rank. New here: in this tiny model it happens after one round of training, it closes exactly when the old ops are solved, shrink-and-perturb does not fix it, and Muon avoids it while Adam does not.
 
 **Limits.** One tiny model, one op order, 2 starting seeds. Muon runs used 3000-step phase 1 and its own learning rates, so Muon vs Adam differs in more than the optimizer.
+
+### Is it the trained network or the optimizer that follows? Swap them
+
+Same task (add × at 12% to a model trained on + and −), 2 seeds × 2 batch orders, [swap.jsonl](swap.jsonl). "Off" = share of h1 units that output 0 on every × input.
+
+| phase 1 → phase 2 | units off: start → step 100 → step 1000 | × held-out (train) |
+|---|---|---|
+| Adam → Adam | 0.89–0.91 → stays → 0.96–1.00 | 0.02–0.03 (0.02–0.04) |
+| Adam → **Muon** (6000 steps) | 0.89–0.91 → **0.00** → 0.00 | 0.09–0.14 (0.89–0.92) |
+| Muon → **Adam** | 0.00 → **0.61–0.77** → 0.58–0.91 | 0.02, 0.03, 0.54, 0.59 |
+| Muon → Adam, lr warmup over 500 steps | 0.00 → 0.00 → 0.14–0.95 | 0.03, 0.58, 0.79, 0.91 |
+| Muon → Adam, output layer reset | 0.00 → 0.40–0.68 → 0.54–0.75 | 0.03, 0.03, 0.90, 0.91 |
+| Adam → 500 Muon steps → Adam | 0.89–0.91 → 0 → 0.69–0.81 at step 100 of Adam | 0.03, 0.03, 0.04, 0.26 |
+| Adam → 500 Muon steps → Adam with warmup | 0.89–0.91 → 0 → 0.02–0.08 | **0.24–0.38 (1.00)** in 4 of 4 |
+| Adam → Adam with warmup | 0.89–0.91, stays | 0.02–0.03 |
+
+- **Muon switches dead units back on in under 100 steps.** Adam cannot: an off unit gets zero gradient, Adam divides zero by a tiny number and still moves nothing. Muon's update is a full-rank matrix with every direction at the same size, so every unit's incoming weights move each step whatever their gradient.
+- **Adam switches healthy units off in under 100 steps** when it restarts at full learning rate with empty moment estimates. The × loss starts high (7.9–8.4: confident wrong answers) and the quickest way down is to silence × inputs (loss ≈ ln 97 = 4.57). With warmup the first 100 steps keep every unit on.
+- **The share of units off at step 1000 predicts the result:** runs with 70–95% off end at 0.02–0.03; runs with 14–60% off learn × (0.54–0.91).
+- **A practical recipe from this:** before adding new data to an Adam-trained model, run a few hundred Muon steps, then continue with Adam using a warmup. Here it lifts × from 0.02–0.03 to 0.24–0.38, still below a fresh model (0.43–0.91). Untested beyond this toy.
