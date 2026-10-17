@@ -34,6 +34,12 @@ A matrix can be pictured by what it does to a circle. Multiply every point of a 
 
 Here G stretches one direction by 1.00 and the other by 0.20. A plain update with this G moves the weights 5 times more along the blue arrow than along the rust one.
 
+The arrows are not the x and y axes. The long arrow is the longest radius of the ellipse, and the short arrow is the shortest. Every other radius is somewhere in between. The two arrows are always at 90° to each other. Our G stretches first and then turns everything by 30°, so its arrows point diagonally. Another matrix puts them at another angle.
+
+![Three matrices: arrows on the axes, turned 30°, turned 17°. Always the longest and shortest radius.](images/step1b_directions.png)
+
+A 2×2 matrix has 2 strengths. A 3×3 matrix turns a ball into an egg shape with 3 arrows. A 768×768 weight matrix has 768 strengths, one per arrow, all at 90° to each other.
+
 In real networks this imbalance is far worse. Muon's author reports that updates for transformer weight matrices are dominated by a few directions, and the rest are almost zero. Muon's goal is to make every strength equal to 1. The arrows keep their directions. Only their lengths change. The ellipse becomes a circle, so the update moves every direction by a similar amount.
 
 ## 2. Step 0: divide G by its size
@@ -158,6 +164,7 @@ pip install -r requirements.txt
 python3 muon_orth.py      # the 8×8 table above
 python3 teach_size.py     # images/step0_size.png
 python3 teach.py          # images/step1.png … step4.png
+python3 teach_directions.py  # images/step1b_directions.png
 python3 plot_poly.py      # images/poly_plot.png
 python3 intro_plots.py    # images/muon_timeline.png, muon_numbers.png
 ```
