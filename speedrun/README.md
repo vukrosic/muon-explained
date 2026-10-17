@@ -71,7 +71,10 @@ It helps on 4 of 5 seeds. The differences spread by about 0.005 from seed to see
 
 **Question.** Muon gives every direction of the update the same push, including weak directions backed by few examples in the batch. Does pushing those less train better?
 
-**Setup** ([rare_push.py](rare_push.py), a diagnostic, not a speedrun entry because it uses an SVD). Record 3 settings. Each step, the update keeps its arrows from an exact SVD and gets strengths S^p, then is scaled to the same total size as record 3's 2-round update on that step. Only the shape of the strengths changes. p = 0 pushes every direction equally (exact Muon); p = 0.25 and 0.5 push weak directions less. 3 seeds each. Results in [rare_push.jsonl](rare_push.jsonl).
+**Setup** ([rare_push.py](rare_push.py), a diagnostic, not a speedrun entry because it uses an SVD). Record 3 settings. Each step, the update keeps its arrows from an exact SVD and gets strengths S^p, then is scaled to the same total size as record 3's 2-round update on that step. Only the shape of the strengths changes. p = 0 pushes every direction equally (exact Muon); p = 0.25 and 0.5 push weak directions less. 3 seeds each. Results in [rare_push.jsonl](rare_push.jsonl), charts from [plot_rare_push.py](plot_rare_push.py).
+
+![loss vs p](../images/rare_push1.png)
+![gap vs p = 0 per seed](../images/rare_push2.png)
 
 | seed | exact equal, p = 0 | p = 0.25 | p = 0.5 | record 3 (2 rounds) |
 |---|---|---|---|---|
