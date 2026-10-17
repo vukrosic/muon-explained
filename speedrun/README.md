@@ -39,11 +39,33 @@ The seed 1 check (not part of the score) shows the gain is not luck on seed 0: 0
 
 **Tried and worse** (all in runs.jsonl):
 
-- Per-neuron normalization after Newton–Schulz (NorMuon style, each row divided by its running size, total update size kept): predicted 1.62, got 1.6322 (row average 0.99) and 1.6361 (0.95); Muon lr 0.014 or 0.03 did not fix it. With only 2 rounds, rows may already be balanced enough.
-
 - More rounds with everything else tuned: 3 rounds 1.6883, 5 rounds 1.6684, against 1.6540 for 2 rounds with the same settings. Exact orthogonalization is not what this model needs.
 - 1 round with Polar Express's first coefficients: 1.6411 vs 1.6409 for 2 rounds at the same settings, at a third less compute. A tie.
 - Weight decay 0.2 (1.6805) or more; AdamW lr 0.05 (1.6354); AdamW beta2 0.99 or 0.95; beta1 0.8; momentum 0.9 or 0.97; cubic rounds; dividing by the largest strength instead of the total size.
+
+## Per-neuron normalization: why seed 0 said "worse"
+
+After Newton–Schulz, each neuron's row of the update is divided by its running average size (average over 0.99 of past steps), then the whole update is scaled back to its old total size ([why_rownorm.py](why_rownorm.py) measures what it does). Predicted 1.62; seed 0 gave 1.6322, worse than the record's 1.6297.
+
+**It is not worse. Seed 0 was the unlucky draw.** The same pair of settings on 5 seeds:
+
+| seed | record 3 | + per-neuron normalization | difference |
+|---|---|---|---|
+| 0 | 1.6297 | 1.6322 | +0.0025 |
+| 1 | 1.6201 | 1.6146 | −0.0055 |
+| 2 | 1.6307 | 1.6200 | −0.0107 |
+| 3 | 1.6320 | 1.6230 | −0.0090 |
+| 4 | 1.6315 | 1.6250 | −0.0065 |
+| mean | 1.6288 | 1.6230 | **−0.0058** |
+
+It helps on 4 of 5 seeds. The differences spread by about 0.005 from seed to seed, so seed 0's +0.0025 is within that spread. **Any change smaller than about 0.01 cannot be judged on one seed.**
+
+**What it does to the update** (record 3 settings, seed 0, steps 50 to 900):
+
+- **2 rounds leave the neurons unequal.** In the two hidden layers, the 90th-percentile neuron's row is 2.3 to 3.0 times the 10th-percentile one. In the first layer it is 1.5 times.
+- **The normalization mostly lifts neurons that fire rarely.** The multiplier it gives a row is negatively correlated with how often that neuron's ReLU is on (−0.12 to −0.65). A neuron that fires on few inputs gets small gradients, so its running size is small and its row is multiplied up.
+- **Most neurons change by little, a few by a lot.** 80% of rows are multiplied by 0.72 to 1.89, which turns the whole update by 8° (first layer) to 18° (hidden layers). But single rows reach ×12 (h1, step 200), ×36 (step 500) and ×225 (step 900): neurons whose updates have been near zero for a long time get a large push all at once.
+- **Likely reason it varies by seed** (not tested): which neurons are rare, and when they get those large pushes, depends on the starting weights. The average effect is a small gain; the few huge multipliers add noise on top.
 
 ## Earlier version: time to reach 1.68 (retired)
 
