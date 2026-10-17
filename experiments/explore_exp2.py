@@ -109,6 +109,17 @@ def panel6(a):
     a.legend()
 
 
+def panel5_linear(a):                             # chart 5 on linear axes
+    for st, c in zip(KEEP, ["#9ecae1", "#6baed6", "#3182bd", "#08519c"]):
+        a.plot(np.arange(1, len(S[st]) + 1), S[st], color=c, lw=2, label=f"step {st}")
+    n = len(S[KEEP[0]])
+    a.axhline(1 / np.sqrt(n), color="#d62728", ls="--", lw=2,
+              label=f"Muon: all set to the same\nvalue, {1 / np.sqrt(n):.3f} (same total size)")
+    a.set(xlabel="singular value number (1 = largest)", ylabel="singular value (update scaled to total size 1)",
+          title="5. Singular values of one real update", ylim=(0, None), xlim=(0, n + 1))
+    a.legend()
+
+
 PANELS = [panel1, panel2, panel3, panel4, panel5, panel6]
 fig, ax = plt.subplots(2, 3, figsize=(17, 10))
 for f, a in zip(PANELS, ax.flat):
@@ -117,7 +128,7 @@ fig.tight_layout()
 out = os.path.join(HERE, "..", "images", "exp2_explore.png")
 fig.savefig(out, dpi=110)
 print(out)
-for i, f in enumerate(PANELS, 1):                 # each chart also as its own square image
+for i, f in [*enumerate(PANELS, 1), ("5_linear", panel5_linear)]:   # each chart also as its own square image
     with plt.rc_context({"font.size": 13}):
         fig, a = plt.subplots(figsize=(7, 7))
         f(a)
