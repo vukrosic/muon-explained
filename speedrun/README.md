@@ -1,53 +1,55 @@
 # Laptop speedrun
 
-Train the tiny character model from the [experiments](../experiments/README.md) to a validation loss of **1.68** in the least training time, by changing only the optimizer.
+Train the tiny character model from the [experiments](../experiments/README.md) on a fixed number of tokens and reach the **lowest validation loss**, by changing only the optimizer.
 
 ## Rules
 
 - **Fixed:**
   - the data (Python standard library source, 90% train / 10% validation);
   - the model (three 512-wide layers);
-  - batch size 512;
+  - **1000 steps × batch 512 = 512,000 training predictions**;
   - seed 0, so every run starts from the same weights and sees the same batches in the same order;
-  - 8 CPU threads;
   - how loss is measured: mean next-character loss over every position of the validation text.
-- **Free:** everything in the OPTIMIZER section of [speedrun.py](speedrun.py). That includes which optimizer, Newton–Schulz rounds and coefficients, learning rates, momentum, schedule and number of steps.
-- **Score:** training seconds (model setup and validation not counted). Run twice and report the mean, because the same run varies by up to 3 s on the laptop.
-- A run counts only if its validation loss is 1.68 or lower. With a fixed seed, the loss is identical on every repeat.
+- **Compute cap:** the whole training run may use at most as many matrix-multiply FLOPs as the baseline (14,647 GFLOP, counted by PyTorch's `FlopCounterMode`). Matrix decompositions (SVD, eigh, QR, inverse, ...) are refused. Without the cap, extra optimizer work (say 50 Newton–Schulz rounds) would be free.
+- **Free:** everything in the OPTIMIZER section of [speedrun.py](speedrun.py): which optimizer, Newton–Schulz rounds and coefficients, learning rates, momentum, weight decay, schedule.
+- **Score:** validation loss. With a fixed seed it is identical on every repeat and does not depend on how fast or busy the computer is. Wall-clock seconds are printed but not scored.
 - Every run is logged in [runs.jsonl](runs.jsonl).
 
 ## Records
 
-Apple M4, PyTorch 2.8.0, Python 3.12.8.
+| # | change | validation loss | seed 1 check | GFLOP |
+|---|---|---|---|---|
+| 1 | baseline: Muon (5 rounds, lr 0.01, momentum 0.95), AdamW lr 0.003, lr decays over the last 50% | 1.6768 | 1.6649 | 14,647 |
+| 3 | 2 rounds, Muon lr 0.02, Muon weight decay 0.05, AdamW lr 0.036, lr decays over the last 85% | **1.6297** | 1.6201 | 7,399 |
 
-| # | change | steps | validation loss | training seconds (2 runs) | mean |
-|---|---|---|---|---|---|
-| 1 | baseline: Muon, 5 rounds, lr 0.01 | 1000 | 1.6768 | 25.5, 22.6 | 24.1 |
-| 2 | 3 rounds instead of 5 | 1000 | 1.6736 | 15.8, 15.7 | 15.8 |
+Record 2 belonged to the earlier time-based version below.
 
-**Record 2.** Newton–Schulz takes 16 ms of each step with 5 rounds and 9.6 ms with 3, because this model's three 512×512 matrices see only 512 examples per step. That is about two thirds of the baseline's training time. 3 rounds cut the time by 34% and the loss did not get worse (1.6736 vs 1.6768).
+**Record 3, how it was found.** One setting at a time, kept only if the loss dropped, then pushed further until it got worse:
 
-## Candidates waiting for a clean timing
+| step | change | loss |
+|---|---|---|
+| start | baseline | 1.6768 |
+| 1 | 2 rounds instead of 5, Muon lr 0.01 → 0.02 (fewer rounds shrink the update, so lr doubles) | 1.6671 |
+| 2 | AdamW lr on the embedding and output layer 0.003 → 0.012 | 1.6623 |
+| 3 | lr decay over the last 85% of steps instead of 50% | 1.6537 |
+| 4 | Muon weight decay 0.05 (the lr-scaled decay Moonlight uses) | 1.6439 |
+| 5 | AdamW lr 0.012 → 0.036 | **1.6297** |
 
-These reached the target, but their times were measured while a game used about 1.7 CPU cores, so the seconds are too high and vary. Their validation losses are exact (fixed seed). Each becomes a record only after 2 runs on an idle laptop.
+The seed 1 check (not part of the score) shows the gain is not luck on seed 0: 0.047 better on seed 0, 0.045 better on seed 1.
 
-| change from record 2 | steps | validation loss | seconds (busy laptop) |
-|---|---|---|---|
-| 2 rounds, Muon lr 0.02 | 1000 | 1.6671 | 12.5 |
-| 2 rounds, Muon lr 0.02, AdamW lr 0.012 | 920 | 1.6765 | 11.9 |
-| 1 round with Polar Express's first coefficients (8.29, −23.60, 17.30), Muon lr 0.025, AdamW lr 0.012 | 920 | 1.6775 | 8.9 |
-| **0 rounds** (update = momentum gradient ÷ its total size), lr 0.15, AdamW lr 0.012 | 1050 | 1.6773 | 7.5 |
+**Tried and worse** (all in runs.jsonl):
 
-What the search found so far (every run is in [runs.jsonl](runs.jsonl)):
+- More rounds with everything else tuned: 3 rounds 1.6883, 5 rounds 1.6684, against 1.6540 for 2 rounds with the same settings. Exact orthogonalization is not what this model needs.
+- 1 round with Polar Express's first coefficients: 1.6411 vs 1.6409 for 2 rounds at the same settings, at a third less compute. A tie.
+- Weight decay 0.2 (1.6805) or more; AdamW lr 0.05 (1.6354); AdamW beta2 0.99 or 0.95; beta1 0.8; momentum 0.9 or 0.97; cubic rounds; dividing by the largest strength instead of the total size.
 
-- **Fewer steps cost more than they save.** With 2 rounds, going from 1000 to 900 steps raised the loss from 1.6671 to 1.6937. Cheaper steps beat fewer steps.
-- **A higher AdamW learning rate on the embedding and output layer (0.012 instead of 0.003) is what made 1 and 0 rounds possible.** 1 round went from 1.7052 to 1.6807; 0 rounds then reached 1.6872 at 1000 steps.
-- **With 0 rounds a step costs about 6 ms instead of 12.5 ms,** so 1050 steps of plain normalized momentum beat 920 steps of Muon.
-- Did not help: cubic rounds, momentum 0.9 or 0.97, dividing by the largest strength instead of the total size, a longer lr decay.
+## Earlier version: time to reach 1.68 (retired)
+
+The first version scored training seconds to reach validation loss 1.68: baseline 24.1 s, record 2 (3 rounds) 15.8 s. It was retired because wall-clock time changes with whatever else runs on the laptop. A game in the background moved the same run from 5.6 s to 7.5 s. Those runs are in [runs-v1-wallclock.jsonl](runs-v1-wallclock.jsonl).
 
 ## Run it
 
 ```bash
 python3 speedrun.py "short description of the change"
-python3 attempt.py "description" ROUNDS=0 MUON_LR=0.15 ADAM_LR=0.012 STEPS=1050   # try settings without editing speedrun.py
+python3 attempt.py "description" ROUNDS=1 MUON_LR=0.025   # try settings without editing speedrun.py
 ```
