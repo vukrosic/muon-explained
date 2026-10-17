@@ -10,6 +10,8 @@ An optimizer is the part of training that decides how to change the weights afte
 
 ![Timeline: Schulz 1933, NanoGPT record Oct 2024, blog post Dec 2024, Moonlight Feb 2025, Kimi K2 Jul 2025](images/muon_timeline.png)
 
+*Figure 1. Timeline: Schulz 1933, NanoGPT record Oct 2024, blog post Dec 2024, Moonlight Feb 2025, Kimi K2 Jul 2025.*
+
 Some facts:
 
 - **The name is an acronym.** Muon stands for MomentUm Orthogonalized by Newton–Schulz.
@@ -20,6 +22,8 @@ Some facts:
 - **It costs a little more compute per step than AdamW.** Each training step already does about 6 operations per weight per token for the forward and backward pass. With 524,288 tokens per step in the NanoGPT speedrun, that is about 3 million operations per weight. AdamW adds about 15 per weight, so its extra cost is close to 0%. Muon's 5 rounds add about 0.7%. For a model the size of Llama 405B the estimate is 0.5%. So Muon pays off whenever it needs at least 0.7% fewer steps than AdamW. Every measurement below says it needs more than that.
 
 ![Muon vs AdamW: CIFAR-10 record 3.3 to 2.6 s, 1.5B model 13.3 to 10 h, compute to the same loss 52% (Moonshot) or 91% (Wen et al.), half the optimizer memory, 0.7% extra cost vs 9–48% saving](images/muon_numbers.png)
+
+*Figure 2. Muon vs AdamW: CIFAR-10 record 3.3 to 2.6 s, 1.5B model 13.3 to 10 h, compute to the same loss 52% (Moonshot) or 91% (Wen et al.), half the optimizer memory, 0.7% extra cost vs 9–48% saving.*
 
 The first two numbers come from Keller Jordan's post. All numbers are reported by their authors, not measured here.
 
@@ -40,11 +44,15 @@ A matrix can be pictured by what it does to a circle. Multiply every point of a 
 
 ![A circle multiplied by G becomes an ellipse with strengths 1.00 and 0.20](images/step1.png)
 
+*Figure 3. A circle multiplied by G becomes an ellipse with strengths 1.00 and 0.20.*
+
 Here G stretches one direction by 1.00 and the other by 0.20. A plain update with this G moves the weights 5 times more along the blue arrow than along the red one.
 
 The arrows are not the x and y axes. The long arrow is the longest radius of the ellipse, and the short arrow is the shortest. Every other radius is somewhere in between. The two arrows are always at 90° to each other. Our G stretches first and then turns everything by 30°, so its arrows point diagonally. Another matrix puts them at another angle.
 
 ![Three matrices: arrows on the axes, turned 30°, turned 17°. Always the longest and shortest radius.](images/step1b_directions.png)
+
+*Figure 4. Three matrices: arrows on the axes, turned 30°, turned 17°. Always the longest and shortest radius.*
 
 A 2×2 matrix has 2 strengths. A 3×3 matrix turns a ball into an egg shape with 3 arrows. A 768×768 weight matrix has 768 strengths, one per arrow, all at 90° to each other.
 
@@ -77,15 +85,25 @@ Here is that difference, step by step. Take two updates of the same total size, 
 
 ![The two updates: a thin ellipse (blue 1.00, red 0.05) and a circle (0.71, 0.71), both of total size 1](images/move0.png)
 
+*Figure 5. The two updates: a thin ellipse (blue 1.00, red 0.05) and a circle (0.71, 0.71), both of total size 1.*
+
 Apply each update 4 times and track how far the weights have moved along each direction.
 
 ![Step 1: each update moves the weights once](images/move1.png)
 
+*Figure 6. Step 1: each update moves the weights once.*
+
 ![Step 2: red has moved 0.10 with the plain update, 1.41 with Muon's](images/move2.png)
+
+*Figure 7. Step 2: red has moved 0.10 with the plain update, 1.41 with Muon's.*
 
 ![Step 3: red has moved 0.15 with the plain update, 2.12 with Muon's](images/move3.png)
 
+*Figure 8. Step 3: red has moved 0.15 with the plain update, 2.12 with Muon's.*
+
 ![Step 4: red has moved 14 times further with Muon's update](images/move4.png)
+
+*Figure 9. Step 4: red has moved 14 times further with Muon's update.*
 
 After 4 steps the plain update has moved red by 0.20. Muon's has moved it by 2.83, 14 times further. Blue pays for it: 2.83 instead of 4.00.
 
@@ -111,9 +129,15 @@ Every matrix can be written as three moves: a turn, a stretch, and another turn.
 
 ![Move 1: the first turn brings the two chosen arrows onto the axes; the circle stays a circle](images/tst1.png)
 
+*Figure 10. Move 1: the first turn brings the two chosen arrows onto the axes; the circle stays a circle.*
+
 ![Move 2: the stretch makes the circle an ellipse with half-widths 1.00 and 0.30](images/tst2.png)
 
+*Figure 11. Move 2: the stretch makes the circle an ellipse with half-widths 1.00 and 0.30.*
+
 ![Move 3: the second turn points the ellipse in its final direction](images/tst3.png)
+
+*Figure 12. Move 3: the second turn points the ellipse in its final direction.*
 
 In symbols:
 
@@ -125,6 +149,8 @@ goal  =  U · Vᵀ              the same two turns, with the stretch removed
 Our G is built exactly this way: a stretch by 1.00 and 0.20, then a 30° turn. Its first turn is 0°, which is why the example above uses a different matrix. Removing the stretch means setting every strength to 1. In the picture, the ellipse becomes a circle again, and the arrows keep their directions.
 
 ![G turns, stretches and turns; the goal U·Vᵀ does the same two turns with no stretch](images/tst4.png)
+
+*Figure 13. G turns, stretches and turns; the goal U·Vᵀ does the same two turns with no stretch.*
 
 ### Why not compute U, S and V directly
 
@@ -145,9 +171,13 @@ This part answers two questions: why Muon needs s³ and s⁵, and where the numb
 
 ![Step 1: the goal is the flat line at 1; red needs ×5.10, blue needs ×1.02](images/idea1.png)
 
+*Figure 14. Step 1: the goal is the flat line at 1; red needs ×5.10, blue needs ×1.02.*
+
 **Step 2: the building blocks.** Muon can only multiply matrices. The next parts show that multiplying gives matrices with the same arrows as X and strengths s, s³ or s⁵. Here s³ means s·s·s ("s cubed"), and s⁵ means s·s·s·s·s ("s to the fifth"). A small strength almost disappears when cubed: 0.196³ = 0.0075. A strength near 1 barely changes: 0.981³ = 0.944. So s³ and s⁵ are large only where s is large.
 
 ![Step 2: s, s³ and s⁵; at red they are 0.196, 0.0075 and 0.0003, at blue 0.981, 0.944 and 0.909](images/idea2.png)
+
+*Figure 15. Step 2: s, s³ and s⁵; at red they are 0.196, 0.0075 and 0.0003, at blue 0.981, 0.944 and 0.909.*
 
 **Step 3: why multiplying X by one number is not enough.** The simplest thing Muon can do to X is multiply the whole matrix by one ordinary number. Call that number **a**. Multiplying by a makes the whole ellipse a times bigger, so both arrows grow by a: blue becomes a × 0.981 and red becomes a × 0.196.
 
@@ -157,6 +187,8 @@ Which a should Muon pick? Try the two obvious ones:
 - To bring blue to 1, a must be 1 ÷ 0.981 = 1.02. But red grows by the same 1.02: 1.02 × 0.196 = 0.20, still far below 1.
 
 ![Step 3: X, 1.02·X and 5.10·X; whichever arrow a is chosen for reaches the circle, the other does not](images/idea3a.png)
+
+*Figure 16. Step 3: X, 1.02·X and 5.10·X; whichever arrow a is chosen for reaches the circle, the other does not.*
 
 **Where the straight line comes from.** The next steps draw each choice as a line on a plot, so here is how a single number turns into a line.
 
@@ -171,9 +203,13 @@ Now do it for every strength from 0 to 1 in steps of 0.05. Each step of 0.05 to 
 
 ![The straight line: dots for 4 strengths, then for every strength in steps of 0.05, then joined into a line](images/idea3b.png)
 
+*Figure 17. The straight line: dots for 4 strengths, then for every strength in steps of 0.05, then joined into a line.*
+
 So "multiply X by one number a" and "a straight line through 0" are the same thing, drawn two ways. A bigger a gives a steeper line. Here are both choices from above as lines. The goal is the flat dashed line at 1. Neither straight line is flat, and no a can make one flat: a straight line through 0 always sends small strengths to small results. So Muon needs a way to grow small strengths more than big ones.
 
 ![Step 3, as curves: 5.10·s fixes red and breaks blue; 1.02·s fixes blue and leaves red small](images/idea3.png)
+
+*Figure 18. Step 3, as curves: 5.10·s fixes red and breaks blue; 1.02·s fixes blue and leaves red small.*
 
 **Step 4: why s³ is needed.** Add b·s³ with a negative b. From step 2, s³ is almost 0 at red and almost 1 at blue. So this term takes almost nothing from red and a lot from blue, and the straight line bends down at the right. Now a can be big for red, and b pulls blue back down.
 
@@ -184,9 +220,30 @@ With only these two numbers there is a trade-off. Both curves below send 1 to a 
 
 ![Step 4: two cubic curves; the gentle one is slow for red, the steep one overshoots to 1.49](images/idea4.png)
 
+*Figure 19. Step 4: two cubic curves; the gentle one is slow for red, the steep one overshoots to 1.49.*
+
 **Step 5: why s⁵ is needed.** Add c·s⁵. Like s³, it acts only on big strengths, even more so. A third number lets s³ pull down harder (−4.775 instead of −2.7445) and s⁵ lift the right end back up. The start stays as steep, so red still reaches 0.640, and the top of the curve drops from 1.49 to 1.20.
 
 ![Step 5: Muon's curve has the same steep start but tops out at 1.20 instead of 1.49](images/idea5.png)
+
+*Figure 20. Step 5: Muon's curve has the same steep start but tops out at 1.20 instead of 1.49.*
+
+**Is this the final curve? No: it is one round.** Look at the left part of the curve above. A strength of 0.1 comes out as 0.34, far from 1. After one round, every strength below 0.22 is still below 0.7. That is expected, because Muon runs the curve 5 times. The output of round 1 goes into round 2, and so on. Each round multiplies a small strength by about 3.4, so it keeps growing until it reaches the green band:
+
+| starts at | round 1 | round 2 | round 3 | round 4 | round 5 |
+|---|---|---|---|---|---|
+| 0.01 | 0.034 | 0.118 | 0.400 | 1.093 | 0.699 |
+| 0.1 | 0.340 | 0.992 | 0.707 | 1.107 | 0.712 |
+| red 0.196 | 0.640 | 1.171 | 0.839 | 0.914 | 0.798 |
+| blue 0.981 | 0.717 | 1.095 | 0.700 | 1.114 | 0.722 |
+
+Once inside the band, a strength bounces between about 0.68 and 1.20 and stays there. After 5 rounds, every strength above 0.0016 ends between 0.68 and 1.20. That is "close to 1" in Muon's sense: not exactly 1, but within a factor of about 1.7 of each other, where X started with red and blue 5 times apart.
+
+![After 5 rounds: the curve applied 5 times stays in the band; four strengths round by round](images/idea6.png)
+
+*Figure 21. After 5 rounds: the curve applied 5 times stays in the band; four strengths round by round.*
+
+[Section 4](#4-repeat-5-times) shows the same 5 rounds on our matrix, one picture per round.
 
 **Where the three numbers come from.** No formula produces them. Keller Jordan, Muon's author, tuned them for this trade-off:
 
@@ -204,6 +261,8 @@ To cube a plain number, multiply it by itself: 0.196 · 0.196 · 0.196 = 0.0075.
 X is three moves: turn, stretch, turn. (Matrices act from right to left, so in U·S·Vᵀ the turn Vᵀ happens first, then the stretch S, then the turn U.) X·X is turn, stretch, turn, turn, stretch, turn. The two turns in the middle, U and then Vᵀ, have nothing to do with each other, so they do not cancel. They turn the ellipse between the two stretches, and the result points somewhere new. Its strengths are not 0.981² and 0.196² either, but 0.407 and 0.091.
 
 ![X, X·X and X·Xᵀ·X: X·X leaves the dashed lines of X's arrows, X·Xᵀ·X stays on them](images/xx_fail.png)
+
+*Figure 22. X, X·X and X·Xᵀ·X: X·X leaves the dashed lines of X's arrows, X·Xᵀ·X stays on them.*
 
 ### The fix: Xᵀ, which runs X's turns backwards
 
@@ -232,6 +291,8 @@ Here are the 9 moves one at a time, with our strengths 0.981 and 0.196. Our G ha
 
 ![X·Xᵀ·X as 9 moves on a circle: moves 4 and 7 undo the turn before them; three stretches remain](images/chain.png)
 
+*Figure 23. X·Xᵀ·X as 9 moves on a circle: moves 4 and 7 undo the turn before them; three stretches remain.*
+
 In symbols:
 
 ```
@@ -245,6 +306,8 @@ The turns are the same as X's. 0.981 becomes 0.944, and 0.196 becomes 0.0075.
 The formula at the top writes the same product as (XXᵀ)X. Here it is as three shapes:
 
 ![X, then X·Xᵀ with every strength squared, then X·Xᵀ·X with every strength cubed; the arrows stay put](images/cube.png)
+
+*Figure 24. X, then X·Xᵀ with every strength squared, then X·Xᵀ·X with every strength cubed; the arrows stay put.*
 
 ### Two more moves give the fifth power
 
@@ -289,9 +352,15 @@ Each term has its own job. Here the curve is built one term at a time.
 
 ![Term 1: 3.4445·s lifts red to 0.675 but sends blue to 3.379](images/curve1.png)
 
+*Figure 25. Term 1: 3.4445·s lifts red to 0.675 but sends blue to 3.379.*
+
 ![Term 2: −4.775·s³ barely touches red but pulls blue down to −1.129](images/curve2.png)
 
+*Figure 26. Term 2: −4.775·s³ barely touches red but pulls blue down to −1.129.*
+
 ![Term 3: +2.0315·s⁵ leaves red at 0.640 and lifts blue back to 0.717](images/curve3.png)
+
+*Figure 27. Term 3: +2.0315·s⁵ leaves red at 0.640 and lifts blue back to 0.717.*
 
 - **3.4445** sets how fast small strengths grow. For small s, s³ and s⁵ are almost 0, so only this term counts.
 - **−4.775** pulls big strengths down. s³ is tiny for small s but close to s near 1.
@@ -315,6 +384,8 @@ Keller Jordan, Muon's author, tuned the three numbers.
 The s⁵ term grows fastest. Above about 1.2 it wins, and the curve shoots up. It pulls toward 1 only for inputs from 0 to about 1.2. Put 1.5 in and 4.48 comes out. Put 3 in and 375 comes out. Real gradients can have strengths of 0.001 or 40. So before the rounds, every strength must be moved into the safe range.
 
 ![Dividing G by its size, and why: the curve explodes for inputs above about 1.2](images/step0_size.png)
+
+*Figure 28. Dividing G by its size, and why: the curve explodes for inputs above about 1.2.*
 
 ### Why divide by the size
 
@@ -344,6 +415,8 @@ For our G: 1.00² + 0.20² = 1.040, the same total as the 4 entries. The reason 
 
 ![Size² equals the sum of squared strengths; the biggest strength after dividing; the 768 case lifted in 3 rounds](images/step0_why.png)
 
+*Figure 29. Size² equals the sum of squared strengths; the biggest strength after dividing; the 768 case lifted in 3 rounds.*
+
 ### The price
 
 When many strengths are big, the size is much bigger than the biggest strength. Take a 768×768 matrix with all 768 strengths equal to 1. Its size is √768 = 27.7, so every strength becomes 0.036. That is far below 1, and it is why the curve's start matters. Near 0 it multiplies by 3.4445, so 0.036 becomes 0.124, then 0.418, then 1.117. Three rounds pay the price back.
@@ -360,6 +433,8 @@ You never compute the arrows or the strengths. The formula only uses matrix mult
 
 ![One round: read each strength off the curve. 0.196 becomes 0.640, 0.981 becomes 0.717](images/step2.png)
 
+*Figure 30. One round: read each strength off the curve. 0.196 becomes 0.640, 0.981 becomes 0.717.*
+
 For our matrix:
 
 | strength | into the curve | out of the curve |
@@ -375,13 +450,23 @@ Each round's output is the next round's input. On the plot, go up to the curve (
 
 ![Round 1: red 0.196 → 0.640, blue 0.981 → 0.717](images/round1.png)
 
+*Figure 31. Round 1: red 0.196 → 0.640, blue 0.981 → 0.717.*
+
 ![Round 2: both pass 1](images/round2.png)
+
+*Figure 32. Round 2: both pass 1.*
 
 ![Round 3: both fall back below 1](images/round3.png)
 
+*Figure 33. Round 3: both fall back below 1.*
+
 ![Round 4: still bouncing around 1](images/round4.png)
 
+*Figure 34. Round 4: still bouncing around 1.*
+
 ![Round 5: red 0.722, blue 0.797](images/round5.png)
+
+*Figure 35. Round 5: red 0.722, blue 0.797.*
 
 The same numbers as a table:
 
@@ -400,6 +485,8 @@ Here is the same matrix after each round:
 
 ![The ellipse after each round becomes almost a circle](images/step4.png)
 
+*Figure 36. The ellipse after each round becomes almost a circle.*
+
 The arrows never turn. The thin ellipse becomes a rounder shape after one round and stays round.
 
 ## 5. Quintic vs cubic
@@ -411,6 +498,8 @@ X  ←  1.5·X  −  0.5·(XXᵀ)X        curve: f(s) = 1.5·s − 0.5·s³
 ```
 
 ![Quintic vs cubic after 1 round and after 5 rounds](images/poly_plot.png)
+
+*Figure 37. Quintic vs cubic after 1 round and after 5 rounds.*
 
 | | quintic | cubic |
 |---|---|---|
@@ -468,7 +557,7 @@ python3 teach.py          # images/step1.png … step4.png
 python3 teach_directions.py  # images/step1b_directions.png
 python3 teach_steps.py    # images/move0.png … move4.png
 python3 teach_series.py   # images/tst1.png … tst4.png, cube.png, round1.png … round5.png
-python3 teach_ladder.py   # images/idea1.png … idea5.png, idea3a.png, idea3b.png, chain.png, xx_fail.png, curve1.png … curve3.png
+python3 teach_ladder.py   # images/idea1.png … idea6.png, idea3a.png, idea3b.png, chain.png, xx_fail.png, curve1.png … curve3.png
 python3 plot_poly.py      # images/poly_plot.png
 python3 intro_plots.py    # images/muon_timeline.png, muon_numbers.png
 ```

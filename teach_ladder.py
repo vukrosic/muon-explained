@@ -1,6 +1,6 @@
 """Section 2 ladder: why X·Xᵀ·X cubes the strengths, and how the curve's three numbers are built up.
 
-images/idea1.png … idea5.png, idea3a.png, idea3b.png  why s alone fails, why s³ and then s⁵ are added
+images/idea1.png … idea6.png, idea3a.png, idea3b.png  why s alone fails, why s³ and s⁵ are added, 5 rounds
 images/chain.png            the 9 moves of X·Xᵀ·X on a circle; the middle turns undo each other
 images/curve1.png … curve3.png  the curve f(s) built one term at a time
 images/xx_fail.png          X, X·X and X·Xᵀ·X side by side: only X·Xᵀ·X keeps X's arrows
@@ -248,6 +248,36 @@ ax.text(0.555, 1.24, "1.20", ha="center", fontsize=13, fontweight="bold")
 ax.text(1.04, 1.17, "green band: 0.7 to 1.2", ha="right", va="top", fontsize=11, color="#2e6b2e")
 ax.legend(loc="upper left", fontsize=12)
 fig.tight_layout(); fig.savefig("images/idea5.png"); plt.close(fig)
+
+# step 5b: the curve is used 5 times; after 5 rounds almost every strength is near 1
+fine = np.linspace(0, 1.0, 20001)
+after = [fine]
+for _ in range(5):
+    after.append(quint(after[-1]))
+fig, axs = plt.subplots(1, 2, figsize=(17, 7), dpi=130, gridspec_kw={"width_ratios": [1.15, 1]})
+ax = axs[0]
+ax.axhspan(0.7, 1.2, color="#e6f0e6", zorder=0); ax.axhline(1, ls="--", color=MUTE, lw=1)
+ax.plot(fine, after[1], color=MUTE, lw=2, ls="--", label="after 1 round (the curve from step 5)")
+ax.plot(fine, after[5], color=INK, lw=1.6, label="after 5 rounds (curve applied 5 times)")
+ax.set_xlim(0, 1.0); ax.set_ylim(0, 1.45)
+ax.set_xlabel("s = strength going in, before round 1"); ax.set_ylabel("strength coming out")
+ax.legend(loc="lower right", fontsize=12)
+ax.set_title("After 1 round, strengths below 0.22 are still below 0.7.\n"
+             "After 5 rounds, every strength above 0.0016 ends between 0.68 and 1.20.", fontsize=13)
+ax = axs[1]
+ax.axhspan(0.7, 1.2, color="#e6f0e6", zorder=0); ax.axhline(1, ls="--", color=MUTE, lw=1)
+for x0, col, nm in [(0.01, "#7a5c9e", "0.01"), (0.1, "#2e8b57", "0.1"), (RED, WEAK, "red 0.196"), (BLUE, BIG, "blue 0.981")]:
+    v = [x0]
+    for _ in range(5):
+        v.append(quint(v[-1]))
+    ax.plot(range(6), v, "o-", color=col, lw=2.5, ms=8, label=f"starts at {nm}")
+ax.set_xticks(range(6)); ax.set_xlim(-0.2, 5.2); ax.set_ylim(0, 1.45)
+ax.set_xlabel("round"); ax.set_ylabel("strength")
+ax.legend(loc="lower right", fontsize=12)
+ax.set_title("Four strengths, round by round. Small ones grow about ×3.4 per round\n"
+             "until they reach the band, then bounce inside it.", fontsize=13)
+fig.suptitle("Step 5 is one round. Muon runs it 5 times.", fontsize=16, fontweight="bold")
+fig.tight_layout(); fig.savefig("images/idea6.png"); plt.close(fig)
 
 # ---------- the curve, one term at a time ----------
 a_, b_, c_ = 3.4445, -4.775, 2.0315
