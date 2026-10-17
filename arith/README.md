@@ -121,3 +121,62 @@ arith.jsonl also has 3 exploratory p = 0 runs at weight decay 1 and 3; the chart
 - **Muon memorizes rare data more, Adam generalizes it more.** At 4–8%, Muon reaches 0.19–0.89 train accuracy on the lone op, Adam 0.01–0.12. At 16–25% with 9000 steps, Adam learns + (0.97–1.00 held-out), Muon reaches 0.39–0.73.
 
 **Limits.** Seed 0, one task, one Adam learning rate.
+
+## How the model does it
+
+**Question.** Does the network really compute ÷ as "× by the inverse", or does it just reuse some parts?
+
+**Setup** ([mech.py](mech.py), results in [mech.jsonl](mech.jsonl)). Four trained models: orders A and B, each with all four ops equally common (Muon) and with the op rare at 4% (Adam, 9000 steps). For every held-out pair, three inputs that all have the same correct answer:
+
+- **rare:** a ÷ b
+- **translated:** a × b⁻¹ (the partner op, with b already inverted)
+- **control:** a different pair a′ × c′ with the same answer
+
+At each layer, the cosine between the hidden state of "rare" and "translated", and between "rare" and "control" (centered: the mean hidden state is subtracted first). Same for + against − with −b.
+
+| model | op | first layer | second layer (h1) | third layer (h2) |
+|---|---|---|---|---|
+| A, all equal, Muon | ÷ | +0.31 / −0.14 | **+0.76 / +0.11** | +0.96 / +0.66 |
+| A, all equal, Muon | + | +0.48 / −0.10 | **+0.75 / +0.18** | +0.94 / +0.67 |
+| A, ÷ rare, Adam | ÷ | +0.11 / −0.21 | **+0.64 / +0.06** | +0.90 / +0.86 |
+| B, all equal, Muon | ÷ | +0.44 / −0.09 | **+0.95 / +0.20** | +0.98 / +0.64 |
+| B, all equal, Muon | + | +0.44 / −0.12 | **+0.88 / +0.22** | +0.97 / +0.70 |
+| B, + rare, Adam | + | +0.24 / −0.14 | **+0.93 / +0.27** | +0.96 / +0.95 |
+
+(each cell: rare vs translated / rare vs control)
+
+**What it means.**
+
+- **By the second layer, a ÷ b looks like a × b⁻¹.** Cosine 0.64–0.95 with the translated input, 0.06–0.27 with another pair that has the same answer. So the match is not just "same answer": the network has rewritten the question into the partner's question.
+- **It happens in every model, even when all four ops are equally common.** The network finds the shortcut on its own; rarity only makes it necessary.
+- **By the last layer everything converges** (control also reaches 0.64–0.97), because all three inputs must give the same answer.
+
+**Why ÷ is harder than +** ([linmap.py](linmap.py)). Fit a linear map from each number's embedding to the embedding of its negative (b → −b) on half the numbers, test on the other half (ridge, λ = 0.1):
+
+| model | b → −b | b → b⁻¹ | b → random number |
+|---|---|---|---|
+| A, all equal, Muon | **+0.78** | +0.00 | −0.80 |
+| A, ÷ rare, Adam | **+0.43** | −0.24 | −0.82 |
+| B, all equal, Muon | **+0.79** | +0.00 | −0.75 |
+| B, + rare, Adam | **+0.56** | −0.03 | −0.64 |
+
+(held-out R²; 1 is perfect, 0 is no better than guessing the average)
+
+- **Negation is (roughly) one linear map on the embeddings. Inversion is not.** Known result (Nanda et al. 2023): these networks store a number as waves cos(2πkb/97). Negation just flips the sign of the sine part, the same linear step for every number. Inversion has no such step, so the first layer must learn it as a lookup, number by number.
+- This fits every earlier table: + needs less data and fewer steps than ÷, as rare op and as lone op.
+
+**When does the rare op click?** Over 34 runs where both partner and rare op pass 50% held-out ([freq.jsonl](freq.jsonl), [adam_long.jsonl](adam_long.jsonl), [few.jsonl](few.jsonl)):
+
+- **It clicks right after its partner.** Median lag 150 steps; 0–100 steps at high frequency, up to 4650 steps (Adam, ÷ at 4%) at low frequency or with few pairs.
+- **It skips most of the memorizing.** At the moment held-out accuracy first passes 50%, how much higher is train accuracy?
+
+| op | runs | train − held-out at that moment (median) |
+|---|---|---|
+| lone op (no partner) | 10 | 0.43 |
+| partner op | 27 | 0.33 |
+| common op | 77 | 0.26 |
+| **rare op with partner** | 27 | **0.11** |
+
+Ops learned from scratch first memorize their training pairs, then generalize (grokking). The rare op with a partner generalizes almost as soon as it fits: it reuses a rule instead of building one.
+
+**Limits.** Four models, seed 0. Cosines are an average over held-out pairs; they show the rewrite, not the circuit that does it.
