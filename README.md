@@ -109,19 +109,96 @@ Our G is built exactly this way: a stretch by 1.00 and 0.20, then a 30° turn. I
 
 ### Why not compute U, S and V directly
 
-The textbook tool that finds U, S and V is called the singular value decomposition (SVD). Muon's author tried it: it is far too slow to run on every weight matrix at every training step. GPUs are fastest at one job, multiplying matrices. So the question becomes: can multiplications alone change the strengths, without touching the arrows?
+The textbook tool that finds U, S and V is the singular value decomposition (SVD). Muon's author tried it. It is far too slow to run on every weight matrix at every training step. A GPU is fastest at one job, multiplying matrices. So Muon only multiplies. The next five parts show, one step at a time, how multiplying alone changes the strengths and leaves the arrows where they are.
 
-They can. X·Xᵀ·X has the same arrows as X, with every strength cubed. Section 3 shows why. Adding a few such terms gives a curve applied to every strength at once:
+Two names first:
+
+- **X** is the matrix Muon works on. It starts as G divided by its size (step 0, further down). For our G, X stretches by 0.981 and 0.196.
+- **s** stands for one strength of X. Our X has two: s = 0.981 (blue) and s = 0.196 (red).
+
+### Xᵀ runs X's moves backwards
+
+X = U·S·Vᵀ does three moves. Matrices act from right to left, so X first turns by Vᵀ, then stretches by S, then turns by U.
+
+Xᵀ is X with rows and columns swapped. It equals V·S·Uᵀ. So Xᵀ first turns by Uᵀ, which undoes U. Then it stretches by the same S. Then it turns by V, which undoes Vᵀ.
+
+### X·Xᵀ·X cubes every strength
+
+X·Xᵀ·X means: do X, then Xᵀ, then X again. That is 9 moves. The picture does them one at a time on a circle. It uses our strengths 0.981 and 0.196. Our G has a first turn of 0°, so the picture uses −50° to make every turn visible.
+
+![X·Xᵀ·X as 9 moves on a circle: moves 4 and 7 undo the turn before them; three stretches remain](images/chain.png)
+
+Move 4 undoes move 3. Move 7 undoes move 6. What is left is the turn Vᵀ, three stretches by S, and the turn U. In symbols:
+
+```
+X·Xᵀ·X  =  U·S·Vᵀ · V·S·Uᵀ · U·S·Vᵀ
+        =  U·S·S·S·Vᵀ            Vᵀ·V and Uᵀ·U undo each other
+        =  U·S³·Vᵀ
+```
+
+The turns are the same as X's. Each strength is cubed: 0.981 becomes 0.944, and 0.196 becomes 0.0075.
+
+The Xᵀ in the middle is what makes the undoing work. X·X·X would put U right before Vᵀ. Those two turns do not undo each other, so the arrows would move.
+
+The formula at the top writes the same product as (XXᵀ)X. Here it is as three shapes:
+
+![X, then X·Xᵀ with every strength squared, then X·Xᵀ·X with every strength cubed; the arrows stay put](images/cube.png)
+
+### Two more moves give the fifth power
+
+Multiply by Xᵀ and X once more: (XXᵀ)²X = X·Xᵀ·X·Xᵀ·X = U·S⁵·Vᵀ. Two more turns undo each other and two more stretches pile up. Red becomes 0.196⁵ = 0.0003.
+
+### Adding them gives a curve
+
+X, (XXᵀ)X and (XXᵀ)²X all have the same turns. When two matrices have the same turns, adding them adds their strengths. So the formula
+
+```
+3.4445·X  −  4.775·(XXᵀ)X  +  2.0315·(XXᵀ)²X
+```
+
+has the same turns as X, and each strength s of X becomes
 
 ```
 f(s) = 3.4445·s − 4.775·s³ + 2.0315·s⁵
 ```
 
-The plan is to pick a curve that pushes every strength toward 1, and to apply it 5 times.
+For red, s = 0.196:
+
+| term | value |
+|---|---|
+| 3.4445 · 0.196 | 0.675 |
+| −4.775 · 0.196³ | −0.036 |
+| 2.0315 · 0.196⁵ | 0.001 |
+| f(0.196) | 0.640 |
+
+For blue, s = 0.981: 3.379 − 4.508 + 1.846 = 0.717.
+
+### Why these three numbers
+
+Each term has its own job. Here the curve is built one term at a time.
+
+![Term 1: 3.4445·s lifts red to 0.675 but sends blue to 3.379](images/curve1.png)
+
+![Term 2: −4.775·s³ barely touches red but pulls blue down to −1.129](images/curve2.png)
+
+![Term 3: +2.0315·s⁵ leaves red at 0.640 and lifts blue back to 0.717](images/curve3.png)
+
+- **3.4445** sets how fast small strengths grow. For small s, s³ and s⁵ are almost 0, so only this term counts.
+- **−4.775** pulls big strengths down. s³ is tiny for small s but close to s near 1.
+- **2.0315** lifts big strengths back up, so they do not fall too far.
+
+Keller Jordan, Muon's author, tuned the three numbers. He made the first one as large as he could. He set the other two so that every strength, after 5 rounds, lands between about 0.7 and 1.2. Section 5 compares this with the older textbook choice, 1.5 and −0.5.
+
+### The plan
+
+1. Step 0: divide G by its size, so every strength is 1 or less. The next three parts explain why.
+2. Rounds 1 to 5: apply the formula. Each round feeds every strength through f(s).
+
+[Section 3](#3-step-1-one-round-on-our-matrix) runs round 1 on our matrix. [Section 4](#4-repeat-5-times) runs all 5.
 
 ### Why the strengths must start at 1 or less
 
-A curve with s⁵ in it shoots up for big inputs. It pulls toward 1 only for inputs from 0 to about 1.2. Put 1.5 in and 4.48 comes out. Put 3 in and 375 comes out. Real gradients can have strengths of 0.001 or 40. So before the rounds, every strength must be moved into the safe range.
+The s⁵ term grows fastest. Above about 1.2 it wins, and the curve shoots up. It pulls toward 1 only for inputs from 0 to about 1.2. Put 1.5 in and 4.48 comes out. Put 3 in and 375 comes out. Real gradients can have strengths of 0.001 or 40. So before the rounds, every strength must be moved into the safe range.
 
 ![Dividing G by its size, and why: the curve explodes for inputs above about 1.2](images/step0_size.png)
 
@@ -147,17 +224,13 @@ For our G: 1.00² + 0.20² = 1.040, the same total as the 4 entries. The reason 
 
 When many strengths are big, the size is much bigger than the biggest strength. Take a 768×768 matrix with all 768 strengths equal to 1. Its size is √768 = 27.7, so every strength becomes 0.036. That is far below 1, and it is why the curve's start matters. Near 0 it multiplies by 3.4445, so 0.036 becomes 0.124, then 0.418, then 1.117. Three rounds pay the price back.
 
-## 3. Step 1: one round is one curve
+## 3. Step 1: one round on our matrix
 
-Here is the key fact. The matrix formula does the same thing as feeding each strength into this curve:
+Round 1 applies the formula once to our X. As [section 2](#adding-them-gives-a-curve) showed, that feeds each strength through the curve, and the arrows stay where they are:
 
 ```
 f(s) = 3.4445·s − 4.775·s³ + 2.0315·s⁵
 ```
-
-Why? Write X with its arrows and strengths as X = U·S·Vᵀ, where S holds the strengths. Then XXᵀ = U·S²·Uᵀ, so (XXᵀ)X = U·S³·Vᵀ. Multiplying by XXᵀ cubes every strength and leaves the arrows alone. Doing it twice gives the fifth power. So the whole formula gives U·f(S)·Vᵀ: the same arrows, with each strength replaced by f(strength).
-
-![X, then X·Xᵀ with every strength squared, then X·Xᵀ·X with every strength cubed; the arrows stay put](images/cube.png)
 
 You never compute the arrows or the strengths. The formula only uses matrix multiplications, which GPUs are fast at. The strengths change anyway.
 
@@ -271,6 +344,7 @@ python3 teach.py          # images/step1.png … step4.png
 python3 teach_directions.py  # images/step1b_directions.png
 python3 teach_steps.py    # images/move0.png … move4.png
 python3 teach_series.py   # images/tst1.png … tst4.png, cube.png, round1.png … round5.png
+python3 teach_ladder.py   # images/chain.png, curve1.png … curve3.png
 python3 plot_poly.py      # images/poly_plot.png
 python3 intro_plots.py    # images/muon_timeline.png, muon_numbers.png
 ```
