@@ -30,11 +30,11 @@ ax.set_title("From a 1933 matrix trick to trillion-parameter models", fontsize=1
 fig.tight_layout(); fig.savefig("images/muon_timeline.png"); plt.close(fig)
 
 # ---------- numbers ----------
-fig, ax = plt.subplots(1, 4, figsize=(17, 4.8), dpi=130)
+fig, ax = plt.subplots(1, 5, figsize=(21, 5.2), dpi=130, gridspec_kw={"width_ratios": [1, 1, 1.5, 1, 1]})
 
 
 def pair(a, title, vals, unit, fmt="{:g}", names=("AdamW", "Muon")):
-    bars = a.bar(list(names), vals, color=[ADAM, MUON], width=0.6)
+    bars = a.bar(list(names), vals, color=[ADAM] + [MUON] * (len(vals) - 1), width=0.6)
     for b, v in zip(bars, vals):
         a.text(b.get_x() + b.get_width() / 2, v, fmt.format(v) + unit, ha="center", va="bottom", fontsize=14, fontweight="bold")
     a.set_ylim(0, max(vals) * 1.25); a.set_yticks([])
@@ -44,10 +44,14 @@ def pair(a, title, vals, unit, fmt="{:g}", names=("AdamW", "Muon")):
 
 pair(ax[0], "CIFAR-10 to 94% accuracy\n(record, A100-seconds)", [3.3, 2.6], " s", names=("old record", "Muon"))
 pair(ax[1], "1.5B model to GPT-2 XL level\n(8×H100-hours)", [13.3, 10], " h")
-pair(ax[2], "Compute to reach the same loss\n(Moonshot AI scaling laws)", [1.0, 0.5], "", "{:.0%}")
+pair(ax[2], "Compute to reach the same loss\n(disputed: two studies disagree)", [1.0, 0.52, 1 / 1.1], "", "{:.0%}",
+     names=("AdamW", "Muon,\nMoonshot AI", "Muon,\nWen et al.\n1.2B model"))
 pair(ax[3], "Numbers stored per weight\n(optimizer memory)", [2, 1], "")
+pair(ax[4], "Muon's extra cost vs its saving\n(% of AdamW's compute)", [0.7, 9, 48], "%", "{:g}",
+     names=("extra cost\nper step", "saving,\nWen et al.", "saving,\nMoonshot"))
 ax[3].text(0.5, -0.17, "AdamW: average + average square\nMuon: average only", transform=ax[3].transAxes, ha="center", va="top", fontsize=11.5, color=MUTE)
-ax[2].text(0.5, -0.17, "about 2× more efficient", transform=ax[2].transAxes, ha="center", va="top", fontsize=11.5, color=MUTE)
-fig.suptitle("Muon in numbers, as reported. Price: the 5 rounds add about 0.5–0.7% extra compute.", fontsize=16, fontweight="bold")
+ax[2].text(0.5, -0.3, "Moonshot: about 2× more efficient.\nWen et al., every optimizer tuned: about 1.1× at 1.2B", transform=ax[2].transAxes, ha="center", va="top", fontsize=11.5, color=MUTE)
+ax[4].text(0.5, -0.3, "AdamW's own extra cost ≈ 0.0005%.\nMuon's 0.7% is small next to either saving.", transform=ax[4].transAxes, ha="center", va="top", fontsize=11.5, color=MUTE)
+fig.suptitle("Muon vs AdamW, as reported by each source", fontsize=16, fontweight="bold")
 fig.tight_layout(); fig.savefig("images/muon_numbers.png"); plt.close(fig)
 print("saved images/muon_timeline.png images/muon_numbers.png")

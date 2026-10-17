@@ -70,7 +70,7 @@ ax[1].text(0.5, 0.72, "multiply every point\nby the update matrix G", ha="center
 ax[1].text(0.5, 0.45, "G =\n" + fmt(G), ha="center", va="center", family="monospace", fontsize=14)
 ax[1].annotate("", xy=(0.95, 0.2), xytext=(0.05, 0.2), arrowprops=dict(arrowstyle="-|>", lw=3, color=INK), xycoords="axes fraction")
 draw_shape(ax[2], G, "After: an ellipse")
-ax[2].text(0, -1.25, "blue = strong direction, rust = weak direction", ha="center", color=MUTE)
+ax[2].text(0, -1.25, "blue = strong direction, red = weak direction", ha="center", color=MUTE)
 fig.suptitle("Step 1. A matrix stretches space. The two arrow lengths are its strengths (singular values): 1.00 and 0.20.", fontsize=15)
 fig.tight_layout(); fig.savefig("images/step1.png"); plt.close(fig)
 
