@@ -92,8 +92,8 @@ def panel5(a):
     for st, c in zip(KEEP, ["#9ecae1", "#6baed6", "#3182bd", "#08519c"]):
         a.plot(np.arange(1, len(S[st]) + 1), S[st], color=c, label=f"step {st}")
     a.set_yscale("log")
-    a.set(xlabel="direction rank (1 = strongest)", ylabel="strength (update divided by its size)",
-          title="5. Real strengths of one update (layer h1)")
+    a.set(xlabel="singular value number (1 = largest)", ylabel="singular value (update scaled to total size 1)",
+          title="5. Singular values of one real update")
     a.legend()
 
 
