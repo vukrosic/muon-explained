@@ -67,6 +67,27 @@ It helps on 4 of 5 seeds. The differences spread by about 0.005 from seed to see
 - **Most neurons change by little, a few by a lot.** 80% of rows are multiplied by 0.72 to 1.89, which turns the whole update by 8° (first layer) to 18° (hidden layers). But single rows reach ×12 (h1, step 200), ×36 (step 500) and ×225 (step 900): neurons whose updates have been near zero for a long time get a large push all at once.
 - **Likely reason it varies by seed** (not tested): which neurons are rare, and when they get those large pushes, depends on the starting weights. The average effect is a small gain; the few huge multipliers add noise on top.
 
+## Does Muon push weak directions too hard?
+
+**Question.** Muon gives every direction of the update the same push, including weak directions backed by few examples in the batch. Does pushing those less train better?
+
+**Setup** ([rare_push.py](rare_push.py), a diagnostic, not a speedrun entry because it uses an SVD). Record 3 settings. Each step, the update keeps its arrows from an exact SVD and gets strengths S^p, then is scaled to the same total size as record 3's 2-round update on that step. Only the shape of the strengths changes. p = 0 pushes every direction equally (exact Muon); p = 0.25 and 0.5 push weak directions less. 3 seeds each. Results in [rare_push.jsonl](rare_push.jsonl).
+
+| seed | exact equal, p = 0 | p = 0.25 | p = 0.5 | record 3 (2 rounds) |
+|---|---|---|---|---|
+| 0 | 1.6359 | 1.6284 | 1.6318 | 1.6297 |
+| 1 | 1.6274 | 1.6156 | 1.6135 | 1.6201 |
+| 2 | 1.6301 | 1.6205 | 1.6175 | 1.6307 |
+| mean | 1.6311 | **1.6215** | **1.6209** | 1.6268 |
+
+**What it means.**
+
+- **Equal pushes lose on every seed.** p = 0.25 beats p = 0 by 0.0075, 0.0117 and 0.0096; p = 0.5 by 0.0041, 0.0138 and 0.0126. Mean gap about 0.01.
+- **Record 3's 2 rounds sit in between** (1.6268), which fits what 2 rounds do: they leave weak strengths below 1, but less shaped than S^0.25.
+- **p = 0.25 and 0.5 tie** (1.6215 vs 1.6209).
+- **Limits.** One tiny model, 3 seeds. Learning rates were tuned for 2 rounds, not for each p. Experiment 2 (lr 0.01, 2 seeds, other settings) found p = 0 to 0.5 within seed noise; with record 3's settings the gap is consistent across seeds.
+- **Next.** A Newton–Schulz curve with no SVD whose output follows S^0.25 to S^0.5 could beat record 3 legally.
+
 ## Earlier version: time to reach 1.68 (retired)
 
 The first version scored training seconds to reach validation loss 1.68: baseline 24.1 s, record 2 (3 rounds) 15.8 s. It was retired because wall-clock time changes with whatever else runs on the laptop. A game in the background moved the same run from 5.6 s to 7.5 s. Those runs are in [runs-v1-wallclock.jsonl](runs-v1-wallclock.jsonl).
