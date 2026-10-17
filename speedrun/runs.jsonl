@@ -1,0 +1,4 @@
+{"desc": "baseline: Muon 5 rounds, 1000 steps", "seconds": 25.5, "val": 1.67676, "reached": true, "steps": 1000, "seed": 0, "python": "3.12.8", "torch": "2.8.0", "when": "2026-10-17T17:10:15"}
+{"desc": "baseline: Muon 5 rounds, 1000 steps", "seconds": 22.59, "val": 1.67676, "reached": true, "steps": 1000, "seed": 0, "python": "3.12.8", "torch": "2.8.0", "when": "2026-10-17T17:10:39"}
+{"desc": "3 rounds instead of 5", "seconds": 15.83, "val": 1.67357, "reached": true, "steps": 1000, "seed": 0, "python": "3.12.8", "torch": "2.8.0", "when": "2026-10-17T17:10:56"}
+{"desc": "3 rounds instead of 5", "seconds": 15.67, "val": 1.67357, "reached": true, "steps": 1000, "seed": 0, "python": "3.12.8", "torch": "2.8.0", "when": "2026-10-17T17:11:13"}
