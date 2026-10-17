@@ -109,13 +109,13 @@ def panel6(a):
     a.legend()
 
 
-def panel5_linear(a):                             # chart 5 on linear axes
-    for st, c in zip(KEEP, ["#9ecae1", "#6baed6", "#3182bd", "#08519c"]):
-        a.plot(np.arange(1, len(S[st]) + 1), S[st], color=c, lw=2, label=f"step {st}")
-    n = len(S[KEEP[0]])
-    a.axhline(1 / np.sqrt(n), color="#d62728", ls="--", lw=2,
-              label=f"Muon: all set to the same\nvalue, {1 / np.sqrt(n):.3f} (same total size)")
-    a.set(xlabel="singular value number (1 = largest)", ylabel="singular value (update scaled to total size 1)",
+def panel5_linear(a):                             # chart 5 on linear axes, on Muon's own scale
+    # gradient scaled to the same total size as Muon's output U·Vᵀ (sqrt(n)), so Muon's value is 1
+    v = S[900]; n = len(v); g = v * np.sqrt(n)
+    a.plot(np.arange(1, n + 1), g, color="#08519c", lw=2.5, label="gradient's singular values (step 900)")
+    a.axhspan(0.68, 1.20, color="#d62728", alpha=.15, label="real Muon (5 rounds): 0.68 to 1.20")
+    a.axhline(1, color="#d62728", ls="--", lw=2, label="Muon's target: every value = 1")
+    a.set(xlabel="singular value number (1 = largest)", ylabel="singular value (same total size as Muon's output)",
           title="5. Singular values of one real update", ylim=(0, None), xlim=(0, n + 1))
     a.legend()
 
