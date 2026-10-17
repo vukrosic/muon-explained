@@ -98,7 +98,13 @@ arith.jsonl also has 3 exploratory p = 0 runs at weight decay 1 and 3; the chart
 - **Muon is faster, not different.** In 3000 steps Muon p = 0 learns the partner in all 12 runs, Adam in 4. With 9000 steps Adam learns partner and rare operation too (6 of 8 settings reach 0.68–1.00). With exact SVD, 3000 Muon steps take as long as 9000 Adam steps (84 s vs 90 s).
 - **Earlier result explained.** In the first table, ÷ (3%) and × (12%) were both rare, so neither had a learned partner, and neither was ever learned as a rule.
 
-**Limits.** Seed 0 only, one task. Accuracy jumps between seeds (see the first table), so single points on the frequency chart are noisy; the partner correlation holds across all 56.
+**Seeds 1 and 2** ([seeds.jsonl](seeds.jsonl), 32 runs: both orders, rare op at 2, 4, 8%, Muon 3000 steps and Adam 9000 steps, plus partner removed at 4%):
+
+- **The partner rule holds.** With seed 0 added, 38 runs: correlation 0.976 between rare op and partner held-out, mean gap 0.03.
+- **Partner removed: never learned, on every seed.** 1–5% held-out in all 8 new runs.
+- **Adam with 9000 steps learns the rare op on both new seeds** (0.91–1.00 held-out), even ÷ at 2%. Muon at 3000 steps learns + at 2% (0.95–1.00) but ÷ only as far as × goes (0.45–0.64).
+
+**Limits.** One task. Single points on the frequency chart are noisy (one seed-0 Adam run failed entirely, common ops 0.18).
 
 ## How much rare data does the partner save?
 
