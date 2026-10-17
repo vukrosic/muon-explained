@@ -281,7 +281,7 @@ Summary of all 5 rounds:
 **Is the goal 1, or 0.68 to 1.20?** The ideal is exactly 1 for every direction: that is U·Vᵀ, both turns with no stretch. Muon settles for 0.68 to 1.20 on purpose.
 
 - **What hurts training is lopsidedness,** a big gap between directions. Before the rounds, red moves 5 times less than blue (0.196 vs 0.981), and in a real weight matrix the gap can be 1000 times. After 5 rounds, every direction is within about 1.7 times of every other (0.68 vs 1.20), so no direction is starved.
-- **Exactly 1 costs more.** A curve that ends exactly at 1 needs a gentler start, like the gentle cubic in step 4, and so more rounds. Each round is 3 matrix multiplications at every training step. Keller Jordan reports that strengths near 1 train as well as exactly 1, so the curve trades exactness for speed.
+- **Exactly 1 costs more.** A curve that ends exactly at 1 needs a gentler start, like the gentle cubic in step 4, and so more rounds. Each round is 3 matrix multiplications at every training step. Keller Jordan reports that strengths near 1 train as well as exactly 1, so the curve trades exactness for speed. [Section 7](#7-experiment-does-every-direction-need-an-equal-push) tests this on a small model.
 - **Where 0.68 and 1.20 come from.** Both are points on the step 5 curve. 1.20 is its top, at s = 0.555. 0.68 is the bottom of its dip, at s = 1.05. A strength between 0.68 and 1.20 comes out of the next round between 0.682 and 1.136, so once a strength is in that range it stays there.
 
 **Where the three numbers come from.** No formula produces them. Keller Jordan, Muon's author, tuned them for this trade-off:
@@ -612,6 +612,26 @@ def muon_orth(G, steps=5, kind="quintic", eps=1e-7):
 
 Real Muon runs the same loop in bfloat16 on the GPU.
 
+## 7. Experiment: does every direction need an equal push?
+
+Muon's ideal is the same push for every direction (all strengths = 1). We tested whether that matters, on a tiny language model that trains in one minute on a laptop.
+
+**Setup.** Split each update exactly with an SVD, then raise every strength to a power p: s becomes s^p. Then scale the whole update so its total size is the same for every p. p = 0 pushes every direction equally, Muon's ideal. p = 1 keeps the update's own shape, so weak directions are barely pushed. Only p changes; every run has the same starting weights and batches, and each p gets its own best learning rate.
+
+![Validation loss vs p: p = 0, 0.25 and 0.5 tie within seed noise; p = 1 is worse at every learning rate](images/exp2_power.png)
+
+*Figure 43. Validation loss vs p: p = 0, 0.25 and 0.5 tie within seed noise; p = 1 is worse at every learning rate.*
+
+**Results.** At each p's best learning rate, averaged over 2 seeds: p = 0 reaches 1.652, p = 0.25 reaches 1.646, p = 0.5 reaches 1.645, p = 1 reaches 1.695.
+
+**Analysis.**
+
+- **Starving the weak directions costs learning.** p = 1 is the worst at every learning rate and on both seeds.
+- **Pushing them somewhat less costs nothing measurable.** p = 0, 0.25 and 0.5 are within 0.008 of each other, while changing only the seed moves a result by 0.03.
+- **So Muon's band of 0.68 to 1.20 is enough.** It is far more even than p = 0.5, which already tied with exact equality. Reaching exactly 1 would cost more rounds and, at this size, buy nothing.
+
+Full setup, every run, limits and code: [experiments/README.md](experiments/README.md).
+
 ## Run it
 
 ```bash
@@ -626,6 +646,7 @@ python3 teach_series.py   # images/tst1.png … tst4.png, cube.png, round1.png �
 python3 teach_ladder.py   # images/idea1.png … idea6.png, idea3a.png, idea3b.png, rounds1.png … rounds5.png, chain.png, xx_fail.png, curve1.png … curve3.png
 python3 plot_poly.py      # images/poly_plot.png
 python3 intro_plots.py    # images/muon_timeline.png, muon_numbers.png
+cd experiments && python3 exp2_power.py 0.01 && python3 plot_exp2.py   # section 7, see experiments/README.md
 ```
 
 ## Sources
