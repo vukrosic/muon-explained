@@ -167,6 +167,8 @@ This part answers two questions: why Muon needs s³ and s⁵, and where the numb
 
 **First, a reminder of what s is.** X stretches a circle into an ellipse. The ellipse has two arrows, blue and red, and their lengths are X's two strengths: blue 0.981, red 0.196. **s** is the name for one of these lengths. When a sentence says "every s", it means "blue's length, and also red's length".
 
+**Muon works on the whole matrix, never on single strengths.** It does not pull the strengths out, put each one through a curve and put them back. It only multiplies and adds whole matrices. "Each strength goes through the curve" describes what those whole-matrix operations turn out to do to the ellipse, as [section 3](#3-step-1-one-round-on-our-matrix) shows with numbers. The curves below are a way to see that effect, one strength at a time.
+
 **Step 1: the goal, drawn as a line.** Every picture below reads the same way. Pick a strength s on the bottom axis, go up to the line, and read the new strength on the left axis. Muon wants a line that sends every strength to 1. Red has to grow from 0.196 to 1, which is ×5.10, because 0.196 × 5.10 = 1. Blue only has to grow from 0.981 to 1, which is ×1.02, because 0.981 × 1.02 = 1. Each strength needs a different multiplier.
 
 ![Step 1: the goal is the flat line at 1; red needs ×5.10, blue needs ×1.02](images/idea1.png)
@@ -458,7 +460,34 @@ Round 1 applies the formula once to our X. As [section 2](#adding-them-gives-a-c
 f(s) = 3.4445·s − 4.775·s³ + 2.0315·s⁵
 ```
 
-You never compute the arrows or the strengths. The formula only uses matrix multiplications, which GPUs are fast at. The strengths change anyway.
+**What Muon actually computes in one round.** All four lines work on the whole matrix X:
+
+1. A = X·Xᵀ (one matrix multiplication)
+2. B = A·X, which is X·Xᵀ·X (second multiplication)
+3. C = A·B, which is (X·Xᵀ)²·X (third multiplication)
+4. new X = 3.4445·X − 4.775·B + 2.0315·C (multiply each matrix by a number, then add)
+
+Muon never computes the arrows or the strengths. Matrix multiplications are what GPUs are fast at. The strengths change anyway.
+
+**Seeing it on a matrix with no turns.** Take X = [0.981, 0; 0, 0.196]: only a stretch, its two strengths sit on the diagonal. For such a matrix, multiplying matrices just multiplies the diagonal numbers:
+
+| matrix | top-left | bottom-right |
+|---|---|---|
+| X | 0.981 | 0.196 |
+| B = X·Xᵀ·X | 0.944 (= 0.981³) | 0.0075 (= 0.196³) |
+| C = (X·Xᵀ)²·X | 0.909 (= 0.981⁵) | 0.0003 (= 0.196⁵) |
+| 3.4445·X − 4.775·B + 2.0315·C | **0.717** | **0.640** |
+
+Here each strength visibly goes through f(s) by itself, because the matrix is nothing but its two strengths.
+
+**Our actual X has turns.** Its four entries mix both strengths, and the same four lines change all of them:
+
+| | entries | strengths |
+|---|---|---|
+| X | [0.849, −0.098; 0.490, 0.170] | 0.981, 0.196 |
+| new X | [0.621, −0.320; 0.359, 0.554] | **0.717, 0.640** |
+
+The entries change in a way you cannot read by eye. Measure the strengths of the new X and you get exactly 0.717 and 0.640, the same as the no-turn case, and the arrows still point the same way. The reason is in [section 2](#adding-them-gives-a-curve): the turns cancel inside X·Xᵀ·X, so only the stretch changes.
 
 ![One round: read each strength off the curve. 0.196 becomes 0.640, 0.981 becomes 0.717](images/step2.png)
 
