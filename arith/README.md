@@ -244,3 +244,39 @@ For rare ÷: helper i (the right one) or helper n (a control). For rare +: helpe
 - Known in a related form: transformers that know two facts often fail to chain them without many chained examples ("two-hop" reasoning, Wang et al. 2024, *Grokked transformers are implicit reasoners*). Here the same happens for a three-layer network and arithmetic.
 
 **Limits.** Seed 0. With five ops, Muon at 3000 steps does not always learn the partner, which adds noise to the Muon rows.
+
+## Does the partner protect an op from being forgotten?
+
+**Question.** A rare op rides on its partner. If the rare op stops appearing in training but the partner keeps training, does the rare op survive?
+
+**Setup** ([forget.py](forget.py)). Start from fully trained models (all four ops 100% held-out; 3 common ops at 32%, rare op at 4%). Keep training 3000 more steps at a constant learning rate (half the peak), with some ops removed from the batch. 6 models: Adam (9000-step start, seeds 1 and 2, orders A and B) and Muon (3000-step start, seed 1, both orders). Results in [forget.jsonl](forget.jsonl).
+
+| removed from training | removed op, held-out at the end | steps until below 50% (Adam / Muon) |
+|---|---|---|
+| a common op and its partner | 0.01 (12 of 12 ops) | 10 / 20–30 |
+| rare op and its partner | 0.01 (12 of 12) | 10–20 / 20 |
+| rare op only (partner keeps training) | 0.01–0.03 (6 of 6) | 20–150 / 20–30 |
+| a common op only (partner keeps training) | 0.01–0.02 (6 of 6) | 350–400 / 50 |
+| partner only (rare op keeps training at 4%) | 0.01–0.03 (6 of 6) | 10–50 / 20–50 |
+
+**What it means.**
+
+- **The partner does not protect it. Every removed op is forgotten completely**, down to 1–3% held-out, in all 36 runs. Training accuracy on the removed op also falls to 1–3%: the memorized pairs go too.
+- **The partner only slows it down**, about 20–40× for a common op with Adam (350–400 steps instead of 10).
+- **Muon forgets 2–10× faster than Adam.** Weight decay is scaled by the learning rate, and Muon's update has full size every step.
+- **The strange case: × is forgotten while ÷ survives.** Remove × and keep ÷ at 4%: × drops to 0.02–0.03, ÷ stays at 0.46–1.00. ÷ is computed as "× by the inverse" in the middle layers, so the multiplying part must still be there. What is lost is × 's own way in to it.
+
+**Is it really gone? Relearning** ([relearn.jsonl](relearn.jsonl), [relearn_full.jsonl](relearn_full.jsonl); Adam models only). After forgetting, train with the removed op back in the batch:
+
+| forgotten | relearn with all its pairs: steps to 90% held-out | relearn with 300 pairs: held-out | learning it the first time with 300 pairs |
+|---|---|---|---|
+| partner only (× or −) | **100–150** | 0.08–0.47 | 0.10–0.19 |
+| rare op only (÷ or +) | **400–800** | 0.16–0.65 | 0.10–0.19 |
+| both | 950–1750 | 0.06–0.29 | 0.10–0.19 |
+| (fresh model, never trained) | not reached in 3000 | | |
+
+- **With all its pairs, a forgotten op comes back fast.** 100–150 steps for a forgotten partner, 400–800 for a forgotten rare op. A fresh model at the same learning rate learns nothing in 3000 steps. Most of the knowledge is still in the weights. ("Savings": known in general, Ebbinghaus 1885 for people, and for networks after unlearning.)
+- **With 300 pairs it does not come back.** 0.06–0.65, barely above learning it the first time (0.10–0.19). As before, the op's own part (the way in) needs many different examples. Seeing a few examples again does not unlock it.
+- **The order fits the mechanism.** The partner has only a way in to relearn (fastest). The rare op also has its translation, the inverse or negative of b (slower). With both gone, the shared part was damaged too (slowest).
+
+**Limits.** 2 seeds. A constant learning rate made 2 of 16 relearn runs unstable late (a kept op dropped to 0.09–0.13 at the end), see relearn_full.jsonl.
