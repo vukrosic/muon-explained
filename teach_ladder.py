@@ -1,5 +1,6 @@
 """Section 2 ladder: why X·Xᵀ·X cubes the strengths, and how the curve's three numbers are built up.
 
+images/idea1.png … idea5.png  why s alone fails, why s³ and then s⁵ are added
 images/chain.png            the 9 moves of X·Xᵀ·X on a circle; the middle turns undo each other
 images/curve1.png … curve3.png  the curve f(s) built one term at a time
 images/xx_fail.png          X, X·X and X·Xᵀ·X side by side: only X·Xᵀ·X keeps X's arrows
@@ -84,6 +85,105 @@ for a, (M, name, sub) in zip(axs, cases):
     a.set_title(f"{name}\n{sub}", fontsize=15)
 fig.suptitle("Dashed lines = the directions of X's arrows. X·X leaves them. X·Xᵀ·X stays on them.", fontsize=15)
 fig.tight_layout(rect=[0, 0, 1, 0.93]); fig.savefig("images/xx_fail.png"); plt.close(fig)
+
+# ---------- the idea: why s, s³ and s⁵ ----------
+xs = np.linspace(0, 1.0, 400)
+RED, BLUE = 0.196, 0.981
+
+
+def idea_axes(title, step, ylim=(0, 1.65)):
+    fig, ax = plt.subplots(figsize=(11, 7.2), dpi=130)
+    ax.axhline(1, ls="--", color=MUTE, lw=1)
+    ax.set_xlim(0, 1.05); ax.set_ylim(*ylim)
+    ax.set_xlabel("s = one strength going in"); ax.set_ylabel("strength coming out")
+    ax.set_title(title, fontsize=13)
+    fig.suptitle(f"The idea, step {step} of 5", fontsize=16, fontweight="bold")
+    return fig, ax
+
+
+def mark(ax, f, dx=0.03, fmt="{:.3f}"):
+    for x, col, name in [(RED, WEAK, "red"), (BLUE, BIG, "blue")]:
+        y = f(x)
+        ax.plot(x, y, "o", color=col, ms=10, zorder=5)
+        ax.text(x + dx if x < 0.5 else x - dx, y, f"{name}: {x} → " + fmt.format(y), color=col, fontweight="bold",
+                fontsize=13, va="center", ha="left" if x < 0.5 else "right")
+
+
+# step 1: the goal
+fig, ax = idea_axes("How to read these plots: pick a strength on the bottom axis, go up to the line, read the new strength on the left.\n"
+                    "Gray line = X as it is (nothing changes). Green line = the goal: every strength comes out as 1.", 1)
+ax.plot(xs, xs, ":", color=MUTE, lw=2, label="X now: strength out = strength in")
+ax.plot(xs, np.ones_like(xs), color="#2e8b57", lw=4, label="goal: every strength becomes 1")
+for x, col, name, k in [(RED, WEAK, "red", 1 / RED), (BLUE, BIG, "blue", 1 / BLUE)]:
+    ax.plot(x, x, "o", color=col, ms=10, zorder=5)
+    ax.annotate("", xy=(x, 0.985), xytext=(x, x + 0.02), arrowprops=dict(arrowstyle="-|>", color=col, lw=2.5))
+    ax.text(x + 0.02 if x < 0.5 else x - 0.02, (x + 1) / 2 if x < 0.5 else 1.12,
+            f"{name}: {x} → 1\nneeds ×{k:.2f}", color=col, fontweight="bold", fontsize=13,
+            ha="left" if x < 0.5 else "right", va="center")
+ax.legend(loc="upper left", fontsize=12)
+fig.tight_layout(); fig.savefig("images/idea1.png"); plt.close(fig)
+
+# step 2: the three building blocks
+fig, ax = idea_axes("s³ means s·s·s and s⁵ means s·s·s·s·s. A small strength almost vanishes: 0.196³ = 0.0075.\n"
+                    "A strength near 1 barely changes: 0.981³ = 0.944. So s³ and s⁵ are big only where s is big.", 2,
+                    ylim=(0, 1.45))
+for p, ls, lab in [(1, "-", "s"), (3, "--", "s³ = s·s·s"), (5, ":", "s⁵ = s·s·s·s·s")]:
+    ax.plot(xs, xs ** p, color=INK, lw=3, ls=ls, label=lab)
+ax.axvline(RED, color=WEAK, lw=1, alpha=0.5); ax.axvline(BLUE, color=BIG, lw=1, alpha=0.5)
+ax.text(RED + 0.015, 1.4, f"at red, s = 0.196:\n s  = 0.196\n s³ = {RED**3:.4f}\n s⁵ = {RED**5:.4f}",
+        color=WEAK, fontweight="bold", fontsize=13, va="top", family="monospace")
+ax.text(BLUE - 0.015, 1.4, f"at blue, s = 0.981:\n s  = 0.981\n s³ = {BLUE**3:.3f}\n s⁵ = {BLUE**5:.3f}",
+        color=BIG, fontweight="bold", fontsize=13, va="top", ha="right", family="monospace")
+ax.legend(loc="center left", fontsize=12)
+fig.tight_layout(); fig.savefig("images/idea2.png"); plt.close(fig)
+
+# step 3: s alone is a straight line
+fig, ax = idea_axes("With s alone, the only option is a·s: multiply every strength by the same number a.\n"
+                    "Red needs ×5.10, blue needs ×1.02. No single a does both: the line cannot be flat.", 3,
+                    ylim=(0, 5.4))
+for a, ls, lab in [(1 / RED, "-", "5.10·s: red reaches 1, blue goes to 5.00"),
+                   (1 / BLUE, "--", "1.02·s: blue reaches 1, red stays at 0.20")]:
+    ax.plot(xs, a * xs, color=INK, lw=3, ls=ls, label=lab)
+    for x, col in [(RED, WEAK), (BLUE, BIG)]:
+        ax.plot(x, a * x, "o", color=col, ms=10, zorder=5)
+ax.plot(xs, np.ones_like(xs), color="#2e8b57", lw=3, alpha=0.6, label="goal")
+ax.legend(loc="upper left", fontsize=12)
+fig.tight_layout(); fig.savefig("images/idea3.png"); plt.close(fig)
+
+# step 4: add s³ — two cubics, each with a flaw
+cub_steep = lambda x: 3.4445 * x - 2.7445 * x ** 3
+cub_flat = lambda x: 1.5 * x - 0.5 * x ** 3
+fig, ax = idea_axes("Add b·s³ with b negative. It takes almost nothing from red and a lot from blue, so the line bends down.\n"
+                    "But with two numbers Muon must choose: a gentle start (red only reaches 0.290)\n"
+                    "or a steep start that overshoots to 1.49 before it comes down.", 4)
+ax.axhspan(0.7, 1.2, color="#e6f0e6", zorder=0)
+ax.plot(xs, cub_flat(xs), color=MUTE, lw=3, ls="--", label="1.5·s − 0.5·s³   gentle start, never above 1")
+ax.plot(xs, cub_steep(xs), color=INK, lw=3, label="3.4445·s − 2.7445·s³   steep start, bulges to 1.49")
+for f in (cub_flat, cub_steep):
+    for x, col in [(RED, WEAK), (BLUE, BIG)]:
+        ax.plot(x, f(x), "o", color=col, ms=10, zorder=5)
+ax.text(RED + 0.02, cub_flat(RED) - 0.03, f"red → {cub_flat(RED):.3f}", color=WEAK, fontweight="bold", fontsize=13, va="top")
+ax.text(RED + 0.02, cub_steep(RED), f"red → {cub_steep(RED):.3f}", color=WEAK, fontweight="bold", fontsize=13, va="center")
+for f in (cub_flat, cub_steep):
+    ax.text(BLUE + 0.03, f(BLUE), f"blue → {f(BLUE):.3f}", color=BIG, fontweight="bold", fontsize=13, va="center")
+ax.set_xlim(0, 1.3)
+ax.text(0.647, 1.52, "1.49", ha="center", fontsize=13, fontweight="bold")
+ax.text(1.29, 1.17, "green band: 0.7 to 1.2", ha="right", va="top", fontsize=11, color="#2e6b2e")
+ax.legend(loc="lower right", fontsize=12)
+fig.tight_layout(); fig.savefig("images/idea4.png"); plt.close(fig)
+
+# step 5: add s⁵ — Muon's curve
+quint = lambda x: 3.4445 * x - 4.775 * x ** 3 + 2.0315 * x ** 5
+fig, ax = idea_axes("Add c·s⁵. Like s³, it acts on big strengths only, even more so. Now s³ may pull down harder (−4.775)\n"
+                    "and s⁵ lifts the end back up. Same steep start as the steep cubic, but the top is 1.20 instead of 1.49.", 5)
+ax.axhspan(0.7, 1.2, color="#e6f0e6", zorder=0)
+ax.plot(xs, cub_steep(xs), color=MUTE, lw=2, ls="--", label="steep cubic from step 4")
+ax.plot(xs, quint(xs), color=INK, lw=3.5, label="3.4445·s − 4.775·s³ + 2.0315·s⁵   Muon's curve")
+mark(ax, quint)
+ax.text(0.555, 1.24, "1.20", ha="center", fontsize=13, fontweight="bold")
+ax.text(1.04, 1.17, "green band: 0.7 to 1.2", ha="right", va="top", fontsize=11, color="#2e6b2e")
+ax.legend(loc="upper left", fontsize=12)
+fig.tight_layout(); fig.savefig("images/idea5.png"); plt.close(fig)
 
 # ---------- the curve, one term at a time ----------
 a_, b_, c_ = 3.4445, -4.775, 2.0315

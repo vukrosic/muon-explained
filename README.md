@@ -137,7 +137,41 @@ Two names first:
 
 ### The idea: build a curve out of powers
 
-Muon cannot reach into X and set each strength to 1. But suppose it could make two more matrices with the same arrows as X, one with every strength cubed (s³) and one with every strength to the fifth power (s⁵). Then it could add the three up and get, for each strength, 3.4445·s − 4.775·s³ + 2.0315·s⁵. With the right three numbers, that sum is close to 1 for every s between 0 and 1. So the job is to make s³ out of X, using only multiplication, without moving the arrows.
+This part answers two questions: why Muon needs s³ and s⁵, and where the numbers 3.4445, −4.775 and 2.0315 come from. Five pictures, one step each.
+
+**Step 1: the goal, drawn as a line.** Every picture below reads the same way. Pick a strength s on the bottom axis, go up to the line, and read the new strength on the left axis. Muon wants a line that sends every strength to 1. Red has to grow from 0.196 to 1, which is ×5.10. Blue only has to grow from 0.981 to 1, which is ×1.02. Each strength needs a different multiplier.
+
+![Step 1: the goal is the flat line at 1; red needs ×5.10, blue needs ×1.02](images/idea1.png)
+
+**Step 2: the building blocks.** Muon can only multiply matrices. The next parts show that multiplying gives matrices with the same arrows as X and strengths s, s³ or s⁵. Here s³ means s·s·s ("s cubed"), and s⁵ means s·s·s·s·s ("s to the fifth"). A small strength almost disappears when cubed: 0.196³ = 0.0075. A strength near 1 barely changes: 0.981³ = 0.944. So s³ and s⁵ are large only where s is large.
+
+![Step 2: s, s³ and s⁵; at red they are 0.196, 0.0075 and 0.0003, at blue 0.981, 0.944 and 0.909](images/idea2.png)
+
+**Step 3: why s alone is not enough.** With only s, Muon can multiply X by one number a, so every strength is multiplied by the same a. That is a straight line through 0. a = 5.10 brings red to 1 but sends blue to 5.00. a = 1.02 brings blue to 1 but leaves red at 0.20. No single number does both.
+
+![Step 3: 5.10·s fixes red and breaks blue; 1.02·s fixes blue and leaves red small](images/idea3.png)
+
+**Step 4: why s³ is needed.** Add b·s³ with a negative b. From step 2, s³ is almost 0 at red and almost 1 at blue. So this term takes almost nothing from red and a lot from blue, and the straight line bends down at the right. Now a can be big for red, and b pulls blue back down.
+
+With only these two numbers there is a trade-off. Both curves below send 1 to a fixed end: the gentle one to 1.0, the steep one to 0.7.
+
+- The gentle curve 1.5·s − 0.5·s³ never goes above 1, but red only reaches 0.290.
+- The steep curve 3.4445·s − 2.7445·s³ lifts red to 0.654, but it rises to 1.49 before it comes down.
+
+![Step 4: two cubic curves; the gentle one is slow for red, the steep one overshoots to 1.49](images/idea4.png)
+
+**Step 5: why s⁵ is needed.** Add c·s⁵. Like s³, it acts only on big strengths, even more so. A third number lets s³ pull down harder (−4.775 instead of −2.7445) and s⁵ lift the right end back up. The start stays as steep, so red still reaches 0.640, and the top of the curve drops from 1.49 to 1.20.
+
+![Step 5: Muon's curve has the same steep start but tops out at 1.20 instead of 1.49](images/idea5.png)
+
+**Where the three numbers come from.** No formula produces them. Keller Jordan, Muon's author, tuned them for this trade-off:
+
+- 3.4445 is the slope at the start: how many times a small strength grows in one round. He made it as large as the next condition allows.
+- −4.775 and 2.0315 then had to keep the curve from going too far above 1. Once a strength is above about 0.22, the curve sends it to somewhere between about 0.7 and 1.2.
+
+[Why these three numbers](#why-these-three-numbers) shows the curve built one term at a time with red and blue, and why he wanted a steep start.
+
+**What remains to show.** Muon cannot reach into X and change each strength. It needs two new matrices with the same arrows as X and every strength cubed (s³) or raised to the fifth power (s⁵), made only by multiplying. Then adding 3.4445·X, −4.775 times the s³ matrix and 2.0315 times the s⁵ matrix applies the curve to every strength at once. The next parts build the s³ matrix.
 
 ### The obvious try, X·X·X, fails
 
@@ -190,7 +224,7 @@ The formula at the top writes the same product as (XXᵀ)X. Here it is as three 
 
 ### Two more moves give the fifth power
 
-**Why we need a fifth power.** s and s³ alone are not enough. A curve a·s + b·s³ that rises as steeply as 3.4445 near 0 and ends at 0.7 at s = 1 must bulge up to 1.49 in between. A third term, s⁵, lets the curve rise just as steeply and then flatten out: the curve Muon uses never goes above 1.20. It is built term by term two parts below.
+**Why we need a fifth power.** With only s and s³, a steep start bulges up to 1.49 (step 4 of [the idea](#the-idea-build-a-curve-out-of-powers)). s⁵ keeps the top at 1.20 (step 5).
 
 **How to get it.** The same trick, one pair longer: (XXᵀ)²X = X·Xᵀ·X·Xᵀ·X = U·S⁵·Vᵀ. Each extra Xᵀ·X pair adds two turns that cancel and two more stretches. Red becomes 0.196⁵ = 0.0003.
 
@@ -410,7 +444,7 @@ python3 teach.py          # images/step1.png … step4.png
 python3 teach_directions.py  # images/step1b_directions.png
 python3 teach_steps.py    # images/move0.png … move4.png
 python3 teach_series.py   # images/tst1.png … tst4.png, cube.png, round1.png … round5.png
-python3 teach_ladder.py   # images/chain.png, xx_fail.png, curve1.png … curve3.png
+python3 teach_ladder.py   # images/idea1.png … idea5.png, chain.png, xx_fail.png, curve1.png … curve3.png
 python3 plot_poly.py      # images/poly_plot.png
 python3 intro_plots.py    # images/muon_timeline.png, muon_numbers.png
 ```
