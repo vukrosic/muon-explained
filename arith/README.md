@@ -209,3 +209,38 @@ Ops learned from scratch first memorize their training pairs, then generalize (g
 - **Without the partner, the rare op gets the same push and wastes it.** Same top-10% share, same 1–5× ratio, yet held-out stays at 2–4% and train reaches only 17–25%. The optimizer delivers the step; only the partner turns it into a rule.
 
 **Limits.** One seed, one rare frequency. "Descent" is the first-order loss drop for one step, not what momentum and later steps make of it.
+
+## Does knowing the inverse make ÷ few-shot?
+
+**Question.** The model turns a ÷ b into a × b⁻¹, and negation is easy for it while inversion is not (see "How the model does it"). So the hard part of ÷ should be the inverse. If the model is also taught the inverse as its own fact, does ÷ become learnable from a few examples?
+
+**Setup** ([teach.jsonl](teach.jsonl)). Five ops, the first four at 24% of the batch each, the rare op at 4% with only K distinct training pairs. Two new ops, which ignore a:
+
+- **i:** "a i b = b⁻¹" (the inverse of b)
+- **n:** "a n b = −b" (the negative of b)
+
+For rare ÷: helper i (the right one) or helper n (a control). For rare +: helper n (right) or i (control). Muon 3000 steps, Adam 9000 steps, seed 0. [few.jsonl](few.jsonl) gives the same runs without any helper.
+
+| rare ÷, held-out | K = 30 | 100 | 300 | 1000 |
+|---|---|---|---|---|
+| Adam, helper i (inverse) | 0.03 | 0.06 | 0.09 | **0.96** |
+| Adam, helper n (control) | 0.04 | 0.05 | 0.32 | 0.94 |
+| Adam, no helper | 0.03 | 0.08 | 0.17 | 0.65 |
+| Muon, helper i (inverse) | 0.02 | 0.04 | 0.15 | **0.91** |
+| Muon, helper n (control) | 0.03 | 0.07 | 0.15 | 0.45 |
+| Muon, no helper | 0.04 | 0.07 | 0.16 | 0.43 |
+
+| rare +, held-out | K = 30 | 100 | 300 | 1000 |
+|---|---|---|---|---|
+| Adam, helper n (negative) | 0.02 | 0.07 | 0.17 | 0.99 |
+| Adam, helper i (control) | 0.03 | 0.04 | 0.17 | 1.00 |
+| Adam, no helper | 0.04 | 0.04 | 0.10 | 0.99 |
+
+**What it means.**
+
+- **No. Knowing the inverse does not make ÷ few-shot.** With 30–300 pairs, ÷ stays at 2–15% held-out with the inverse taught, the same as with the wrong helper or none. The model knows × (100%) and knows every b⁻¹ (100%), and still cannot put them together from 300 examples.
+- **The knowledge is in the wrong place.** Op i produces b⁻¹ as an *answer*, at the output. ÷ needs b⁻¹ *inside*, in the second layer, where it is multiplied by a (see the cosine table above). Nothing moves a fact from the output to the middle of the network.
+- **At 1000 pairs the inverse helps Muon** (0.91 vs 0.43–0.45), but × itself was also learned better in that run (1.00 vs 0.64), so this one point does not separate the two.
+- Known in a related form: transformers that know two facts often fail to chain them without many chained examples ("two-hop" reasoning, Wang et al. 2024, *Grokked transformers are implicit reasoners*). Here the same happens for a three-layer network and arithmetic.
+
+**Limits.** Seed 0. With five ops, Muon at 3000 steps does not always learn the partner, which adds noise to the Muon rows.

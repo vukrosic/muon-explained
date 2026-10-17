@@ -25,13 +25,16 @@ OUT = os.environ.get("OUT", "arith.jsonl")
 RARE_PAIRS = int(os.environ.get("RARE_PAIRS", 0))         # >0: the last (rarest) op keeps only this many training pairs
 HERE = os.path.dirname(os.path.abspath(__file__))
 OPS = {"+": lambda a, b: (a + b) % N, "-": lambda a, b: (a - b) % N, "*": lambda a, b: (a * b) % N,
-       "/": lambda a, b: (a * pow(b, N - 2, N)) % N}
+       "/": lambda a, b: (a * pow(b, N - 2, N)) % N,
+       "i": lambda a, b: pow(b, N - 2, N), "n": lambda a, b: (-b) % N}   # i, n: inverse / negative of b (a is ignored)
+SYMS = "+-*/in"
+NTOK = N + (6 if os.environ.get("EXTRA") == "1" else 4)   # EXTRA=1: room for the i and n tokens (older saved models have N + 4)
 
 
 class Net(nn.Module):
     def __init__(s):
         super().__init__()
-        s.emb = nn.Embedding(N + 4, 64)                   # tokens: 23 numbers + 4 op symbols
+        s.emb = nn.Embedding(NTOK, 64)                   # tokens: 23 numbers + 4 op symbols
         s.inp = nn.Linear(192, 256, bias=False)
         s.h1 = nn.Linear(256, 256, bias=False)
         s.h2 = nn.Linear(256, 256, bias=False)
@@ -48,8 +51,8 @@ def data(order, gen):
     """Per op (in rarity order): train and test tensors of rows (a, op token, b, answer)."""
     tr, te = [], []
     for k, op in enumerate(order):
-        rows = torch.tensor([(a, N + "+-*/".index(op), b, OPS[op](a, b)) for a in range(N) for b in range(N)
-                             if not (op == "/" and b == 0)])
+        rows = torch.tensor([(a, N + SYMS.index(op), b, OPS[op](a, b)) for a in range(N) for b in range(N)
+                             if not (op in "/i" and b == 0)])
         rows = rows[torch.randperm(len(rows), generator=gen)]
         tr.append(rows[: len(rows) // 2]); te.append(rows[len(rows) // 2:])
     if RARE_PAIRS:
@@ -94,7 +97,7 @@ def main(p, order, seed):
             break
         sched = 1.0 if CONST else min(1.0, (1 - step / STEPS) / DECAY)
         k = torch.multinomial(freq, B, replacement=True, generator=gen)          # which op each example uses
-        x = torch.cat([tr[i][torch.randint(len(tr[i]), (int((k == i).sum()),), generator=gen)] for i in range(4)])
+        x = torch.cat([tr[i][torch.randint(len(tr[i]), (int((k == i).sum()),), generator=gen)] for i in range(len(tr))])
         loss = F.cross_entropy(m(x[:, :3]), x[:, 3])
         m.zero_grad(); loss.backward()
         for gr in adam.param_groups:
