@@ -137,9 +137,11 @@ Two names first:
 
 ### The idea: build a curve out of powers
 
-This part answers two questions: why Muon needs s³ and s⁵, and where the numbers 3.4445, −4.775 and 2.0315 come from. Five pictures, one step each.
+This part answers two questions: why Muon needs s³ and s⁵, and where the numbers 3.4445, −4.775 and 2.0315 come from, in five steps with pictures.
 
-**Step 1: the goal, drawn as a line.** Every picture below reads the same way. Pick a strength s on the bottom axis, go up to the line, and read the new strength on the left axis. Muon wants a line that sends every strength to 1. Red has to grow from 0.196 to 1, which is ×5.10. Blue only has to grow from 0.981 to 1, which is ×1.02. Each strength needs a different multiplier.
+**First, a reminder of what s is.** X stretches a circle into an ellipse. The ellipse has two arrows, blue and red, and their lengths are X's two strengths: blue 0.981, red 0.196. **s** is the name for one of these lengths. When a sentence says "every s", it means "blue's length, and also red's length".
+
+**Step 1: the goal, drawn as a line.** Every picture below reads the same way. Pick a strength s on the bottom axis, go up to the line, and read the new strength on the left axis. Muon wants a line that sends every strength to 1. Red has to grow from 0.196 to 1, which is ×5.10, because 0.196 × 5.10 = 1. Blue only has to grow from 0.981 to 1, which is ×1.02, because 0.981 × 1.02 = 1. Each strength needs a different multiplier.
 
 ![Step 1: the goal is the flat line at 1; red needs ×5.10, blue needs ×1.02](images/idea1.png)
 
@@ -147,9 +149,18 @@ This part answers two questions: why Muon needs s³ and s⁵, and where the numb
 
 ![Step 2: s, s³ and s⁵; at red they are 0.196, 0.0075 and 0.0003, at blue 0.981, 0.944 and 0.909](images/idea2.png)
 
-**Step 3: why s alone is not enough.** With only s, Muon can multiply X by one number a, so every strength is multiplied by the same a. That is a straight line through 0. a = 5.10 brings red to 1 but sends blue to 5.00. a = 1.02 brings blue to 1 but leaves red at 0.20. No single number does both.
+**Step 3: why multiplying X by one number is not enough.** The simplest thing Muon can do to X is multiply the whole matrix by one ordinary number. Call that number **a**. Multiplying by a makes the whole ellipse a times bigger, so both arrows grow by a: blue becomes a × 0.981 and red becomes a × 0.196.
 
-![Step 3: 5.10·s fixes red and breaks blue; 1.02·s fixes blue and leaves red small](images/idea3.png)
+Which a should Muon pick? Try the two obvious ones:
+
+- To bring red to 1, a must be 1 ÷ 0.196 = 5.10. But blue grows by the same 5.10: 5.10 × 0.981 = 5.01, far past 1.
+- To bring blue to 1, a must be 1 ÷ 0.981 = 1.02. But red grows by the same 1.02: 1.02 × 0.196 = 0.20, still far below 1.
+
+![Step 3: X, 1.02·X and 5.10·X; whichever arrow a is chosen for reaches the circle, the other does not](images/idea3a.png)
+
+On the curve plot, "multiply every strength by a" is a straight line through 0 with slope a: out = a × s. Neither line is flat at 1. So one number cannot work; Muon needs a way to grow small strengths more than big ones.
+
+![Step 3, as curves: 5.10·s fixes red and breaks blue; 1.02·s fixes blue and leaves red small](images/idea3.png)
 
 **Step 4: why s³ is needed.** Add b·s³ with a negative b. From step 2, s³ is almost 0 at red and almost 1 at blue. So this term takes almost nothing from red and a lot from blue, and the straight line bends down at the right. Now a can be big for red, and b pulls blue back down.
 
@@ -444,7 +455,7 @@ python3 teach.py          # images/step1.png … step4.png
 python3 teach_directions.py  # images/step1b_directions.png
 python3 teach_steps.py    # images/move0.png … move4.png
 python3 teach_series.py   # images/tst1.png … tst4.png, cube.png, round1.png … round5.png
-python3 teach_ladder.py   # images/idea1.png … idea5.png, chain.png, xx_fail.png, curve1.png … curve3.png
+python3 teach_ladder.py   # images/idea1.png … idea5.png, idea3a.png, chain.png, xx_fail.png, curve1.png … curve3.png
 python3 plot_poly.py      # images/poly_plot.png
 python3 intro_plots.py    # images/muon_timeline.png, muon_numbers.png
 ```

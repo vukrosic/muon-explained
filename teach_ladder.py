@@ -1,6 +1,6 @@
 """Section 2 ladder: why X·Xᵀ·X cubes the strengths, and how the curve's three numbers are built up.
 
-images/idea1.png … idea5.png  why s alone fails, why s³ and then s⁵ are added
+images/idea1.png … idea5.png, idea3a.png  why s alone fails, why s³ and then s⁵ are added
 images/chain.png            the 9 moves of X·Xᵀ·X on a circle; the middle turns undo each other
 images/curve1.png … curve3.png  the curve f(s) built one term at a time
 images/xx_fail.png          X, X·X and X·Xᵀ·X side by side: only X·Xᵀ·X keeps X's arrows
@@ -137,11 +137,38 @@ ax.text(BLUE - 0.015, 1.4, f"at blue, s = 0.981:\n s  = 0.981\n s³ = {BLUE**3:.
 ax.legend(loc="center left", fontsize=12)
 fig.tight_layout(); fig.savefig("images/idea2.png"); plt.close(fig)
 
+# step 3a: multiplying X by one number a scales both arrows by a
+Ux = rot(30)
+fig, axs = plt.subplots(1, 3, figsize=(17, 6.8), dpi=130)
+for ax, a, name, sub in [(axs[0], 1.0, "X", "our matrix: arrows 0.981 and 0.196"),
+                         (axs[1], 1 / BLUE, "1.02 · X", "a = 1.02 = 1 ÷ 0.981, chosen for blue"),
+                         (axs[2], 1 / RED, "5.10 · X", "a = 5.10 = 1 ÷ 0.196, chosen for red")]:
+    sv = a * np.array([BLUE, RED])
+    M = Ux @ np.diag(sv)
+    pts = M @ circle
+    lim = max(1.35, 1.12 * sv[0])
+    ax.fill(pts[0], pts[1], color=FILL, zorder=1); ax.plot(pts[0], pts[1], color=INK, lw=2, zorder=2)
+    ax.plot(np.cos(th), np.sin(th), color="#2e8b57", lw=2, ls="--", zorder=3)
+    for i, col, nm in [(0, BIG, "blue"), (1, WEAK, "red")]:
+        v = Ux[:, i] * sv[i]
+        ax.annotate("", xy=v, xytext=(0, 0), zorder=4, arrowprops=dict(arrowstyle="-|>", color=col, lw=3))
+    ok = lambda x: "  ✓" if abs(x - 1) < 0.01 else ""
+    ax.text(0, -0.84 * lim, f"blue {sv[0]:.2f}{ok(sv[0])}", ha="right", color=BIG, fontsize=14, fontweight="bold")
+    ax.text(0.04 * lim, -0.84 * lim, f"red {sv[1]:.2f}{ok(sv[1])}", ha="left", color=WEAK, fontsize=14, fontweight="bold")
+    ax.set_xlim(-lim, lim); ax.set_ylim(-lim, lim); ax.set_aspect("equal"); ax.set_xticks([]); ax.set_yticks([])
+    ax.axhline(0, color="#dddddd", lw=1, zorder=0); ax.axvline(0, color="#dddddd", lw=1, zorder=0)
+    ax.set_title(f"{name}\n{sub}", fontsize=14)
+axs[2].text(0, 0.93 * 5.6, "(zoomed out: this shape is 5× bigger)", ha="center", va="top", fontsize=11, color=MUTE)
+fig.suptitle("Green dashed circle = the goal: both arrows should end on it (length 1).\n"
+             "Multiplying X by a number a makes the whole shape a times bigger, so BOTH arrows grow by a. "
+             "Red needs 5.10, blue needs 1.02.", fontsize=14)
+fig.tight_layout(rect=[0, 0, 1, 0.9]); fig.savefig("images/idea3a.png"); plt.close(fig)
+
 # step 3: s alone is a straight line
 fig, ax = idea_axes("With s alone, the only option is a·s: multiply every strength by the same number a.\n"
                     "Red needs ×5.10, blue needs ×1.02. No single a does both: the line cannot be flat.", 3,
                     ylim=(0, 5.4))
-for a, ls, lab in [(1 / RED, "-", "5.10·s: red reaches 1, blue goes to 5.00"),
+for a, ls, lab in [(1 / RED, "-", "5.10·s: red reaches 1, blue goes to 5.01"),
                    (1 / BLUE, "--", "1.02·s: blue reaches 1, red stays at 0.20")]:
     ax.plot(xs, a * xs, color=INK, lw=3, ls=ls, label=lab)
     for x, col in [(RED, WEAK), (BLUE, BIG)]:
