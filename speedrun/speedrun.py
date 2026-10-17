@@ -21,16 +21,26 @@ SEED = 0
 STEPS = 1000
 MUON_LR, ADAM_LR, BETA = 0.01, 3e-3, 0.95
 ROUNDS = 3
+DECAY = 0.5                                              # share of steps at the end over which lr falls to 0
 ABC = (3.4445, -4.775, 2.0315)
+COEFS = None                                             # optional list of (a, b, c), one per round
+SPEC = 0                                                 # 0: divide by total size; k > 0: by the largest strength, k power steps
+SAFE = 1.05                                              # with SPEC, divide by SAFE x the estimate (an underestimate would blow up)
 
 
-def flatten(G):
-    """Muon: divide by the size, then ROUNDS rounds of the quintic curve."""
-    X = G / (G.norm() + 1e-7)
-    a, b, c = ABC
-    for _ in range(ROUNDS):
+def flatten(G, v=None):
+    """Muon: divide by the size, then ROUNDS rounds of the quintic curve.
+    v: this matrix's power-iteration vector, kept between steps (used when SPEC > 0)."""
+    if SPEC:
+        for _ in range(SPEC):
+            u = G @ v
+            v.copy_(G.T @ u); v.div_(v.norm() + 1e-12)
+        X = G / (SAFE * (G @ v).norm() + 1e-7)
+    else:
+        X = G / (G.norm() + 1e-7)
+    for a, b, c in COEFS or [ABC] * ROUNDS:
         A = X @ X.T
-        X = a * X + (b * A + c * A @ A) @ X
+        X = a * X + ((b * A + c * A @ A) if c else b * A) @ X   # c = 0: cubic round, one multiply fewer
     return X
 
 
@@ -38,8 +48,9 @@ def optimize(m, g):
     muon_ps = [m.inp.weight, m.h1.weight, m.h2.weight]
     adam = torch.optim.AdamW([m.emb.weight, m.out.weight, m.out.bias], lr=ADAM_LR, weight_decay=0)
     mom = [torch.zeros_like(p) for p in muon_ps]
+    vecs = [torch.ones(p.shape[1]) / p.shape[1] ** 0.5 for p in muon_ps]
     for step in range(STEPS):
-        sched = min(1.0, 2 * (1 - step / STEPS))         # flat, then linear decay over the last half
+        sched = min(1.0, (1 - step / STEPS) / DECAY)     # flat, then linear decay over the last DECAY of steps
         x, y = batch(train, g)
         loss = F.cross_entropy(m(x), y)
         m.zero_grad(); loss.backward()
@@ -47,9 +58,9 @@ def optimize(m, g):
             gr["lr"] = ADAM_LR * sched
         adam.step()
         with torch.no_grad():
-            for p, buf in zip(muon_ps, mom):
+            for p, buf, v in zip(muon_ps, mom, vecs):
                 buf.mul_(BETA).add_(p.grad)
-                p.add_(flatten(p.grad + BETA * buf), alpha=-MUON_LR * sched)   # Nesterov momentum
+                p.add_(flatten(p.grad + BETA * buf, v), alpha=-MUON_LR * sched)   # Nesterov momentum
 # --------------------------------------------------------------------- end of OPTIMIZER ----
 
 
@@ -63,7 +74,7 @@ def full_val(m):
     return tot / len(idx)
 
 
-if __name__ == "__main__":
+def main(desc, settings=""):
     torch.manual_seed(SEED)
     m = Net()
     g = torch.Generator().manual_seed(1000 + SEED)
@@ -72,9 +83,13 @@ if __name__ == "__main__":
     secs = time.perf_counter() - t0
     v = full_val(m)
     hit = v <= TARGET
-    print(f"train {secs:.1f} s   val {v:.4f}   target {TARGET}: {'REACHED' if hit else 'missed'}")
-    rec = dict(desc=sys.argv[1] if len(sys.argv) > 1 else "", seconds=round(secs, 2), val=round(v, 5),
-               reached=hit, steps=STEPS, seed=SEED, python=PYTHON, torch=torch.__version__,
-               when=datetime.datetime.now().isoformat(timespec="seconds"))
+    print(f"{desc:<40} train {secs:5.1f} s   val {v:.4f}   {'REACHED' if hit else 'missed'}", flush=True)
+    rec = dict(desc=desc, settings=settings, seconds=round(secs, 2), val=round(v, 5), reached=hit, seed=SEED,
+               python=PYTHON, torch=torch.__version__, when=datetime.datetime.now().isoformat(timespec="seconds"))
     with open(os.path.join(HERE, "runs.jsonl"), "a") as f:
         f.write(json.dumps(rec) + "\n")
+    return secs, v
+
+
+if __name__ == "__main__":
+    main(sys.argv[1] if len(sys.argv) > 1 else "")
