@@ -53,3 +53,30 @@ python3 plot_arith.py
 ```
 
 arith.jsonl also has 3 exploratory p = 0 runs at weight decay 1 and 3; the chart and table use weight decay 0.05.
+
+## Where does Muon store the rare operation?
+
+**Question.** If we delete the weakest directions of the trained weights, does only the rare operation break?
+
+**Setup** ([cut.py](cut.py)). Two models trained with Muon (p = 0, seed 0), one per rarity order. In all 3 Muon matrices, each weight matrix is split into its singular directions, and a share of the weakest (or the strongest) is set to zero. Then each operation's accuracy on its training pairs is measured again. Results in [cut.jsonl](cut.jsonl).
+
+![deleting weak vs strong directions](../images/arith_cut.png)
+
+| weakest directions deleted | 0% | 30% | 40% | 50% | 60% | 75% |
+|---|---|---|---|---|---|---|
+| 55% op (order A / B) | 1.00 / 1.00 | 1.00 / 1.00 | 0.99 / 0.98 | 0.96 / 0.91 | 0.90 / 0.72 | 0.58 / 0.33 |
+| 12% op (order A / B) | 0.99 / 1.00 | 0.98 / 0.99 | 0.86 / 0.86 | **0.47 / 0.40** | 0.15 / 0.14 | 0.04 / 0.02 |
+
+| strongest directions deleted | 0% | 1% | 2% | 5% |
+|---|---|---|---|---|
+| 55% op (order A / B) | 1.00 / 1.00 | 0.30 / 0.52 | 0.12 / 0.37 | 0.04 / 0.11 |
+| 12% op (order A / B) | 0.99 / 1.00 | 0.74 / 0.61 | 0.30 / 0.40 | 0.08 / 0.09 |
+
+**What it means.**
+
+- **The weakest 30% of directions hold nothing.** Deleting them leaves every operation at 98–100%.
+- **The rare operation lives in the middle directions.** Deleting the weakest 50% drops it to 0.47 and 0.40, while the 55% operation keeps 0.96 and 0.91.
+- **The common operations lean on the strongest directions a bit more.** Deleting the top 1% leaves the common op at 0.30 / 0.52 and the rare op at 0.74 / 0.61. With order B the gap is small.
+- **Everything shares the top directions.** Deleting the strongest 5% breaks every operation.
+
+**Limits.** One seed per order. The rare operation is only memorized, not learned as a rule, so this shows where memorized facts sit, not where rules sit.

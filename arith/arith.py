@@ -101,6 +101,9 @@ def main(p, order, seed):
     print(f"p={p:g} order={order} seed={seed}  " + "  ".join(
         f"{op}({f:.0%}) train {a:.2f} test {b:.2f}" for op, f, a, b in zip(order, FREQ, end["train"], end["test"]))
         + f"   N={N} WD={WD:g} [{secs:.0f} s]", flush=True)
+    if os.environ.get("SAVE"):                                  # keep the model and its split for cut.py; no log line
+        torch.save(dict(model=m.state_dict(), tr=tr, te=te, p=p, order=order, seed=seed), os.environ["SAVE"])
+        return
     with open(os.path.join(HERE, "arith.jsonl"), "a") as f:
         f.write(json.dumps(dict(p=p, order=order, seed=seed, N=N, wd=WD, freq=FREQ, steps=STEPS, log=log)) + "\n")
 
