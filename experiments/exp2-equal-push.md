@@ -49,6 +49,17 @@ At each p's best learning rate, two seeds:
 - **The prediction was half right.** The shape (flat, then worse at p = 1) held. The size did not: p = 1 is 0.04 worse than p = 0, not the 0.09 we guessed.
 - **What it means for Muon.** Muon's 5 rounds leave strengths between 0.68 and 1.20 instead of exactly 1. That spread is much milder than p = 0.5, which already tied with exact equality here. So an equal push matters only in the coarse sense of "don't starve the weak directions", and the extra cost of reaching exactly 1 buys nothing at this size.
 
+## Related work
+
+Read from the papers' abstracts and text; figures not checked.
+
+- **Qi, Chen, Ye, He, Xiao, [Delving into Muon and Beyond](https://arxiv.org/abs/2602.04669) (February 2026).** Same knob, called spectral compression: U·Σ^p·Vᵀ with p = 1, 1/2, 1/4, 0, on GPT-2 124M, OpenWebText, 200K steps, learning rate tuned per run. On momentum inputs: p = 0 (Muon) best 2.887, p = 1/4 best 2.876, p = 1 (momentum SGD) unstable across learning rates. Adam reached 2.871. Their conclusion: Muon works mainly as a stabilizer, not as a clearly better optimizer.
+- **Dong, Sawin, [Muon^p: Muon with Fractional Spectral Powers](https://arxiv.org/abs/2606.13867) (June 2026).** U·S^p·Vᵀ computed with matrix multiplications only (no SVD), default p = 1/3, models from 135M to 3B. Training from scratch: Muon (p = 0) beat p = 1/3, also with exact SVD. Fine-tuning: p = 1/3 beat Muon (e.g. GSM8K pass@8 48.27 vs 41.76 on Llama3-1B). A p sweep while fine-tuning SmolLM-360M kept validation losses within 0.01, with the best p between 0 and 1. Their reason: training from scratch needs every direction pushed, fine-tuning works in fewer directions. Code: github.com/princeton-pli/muon-p.
+- **Magakyan, Parrilo, Ozdaglar, [Spectral Scaling Laws of Muon](https://arxiv.org/abs/2606.04058) (June 2026).** Measured the strengths of Muon's momentum in models from 77M to 2.8B parameters. They follow power laws in model size: about M^−0.25 for middle-to-late layers, so 5 rounds should stay enough, and up to M^−0.96 for some late layers, which may drop below what 5 rounds can lift at frontier scale.
+- **Selvaraj, [Iterative Orthogonalization Scaling Laws](https://arxiv.org/abs/2505.04005) (May 2025).** Shows on random matrices that strengths shrink as matrices grow, so the rounds may fall short at large scale. No fix proposed.
+
+**How our result compares.** All three p studies find that p between 0 and 0.5 moves the loss by about 0.01 or less, as we found. Which side wins differs: Qi et al. found p = 1/4 slightly better, Dong and Sawin found p = 0 better for training from scratch, and our two seeds cannot tell them apart. p = 1 is worse or unstable in both our run and Qi et al.
+
 ## Limits
 
 - One tiny model (three 512-wide layers), 1000 steps, characters of Python code. A bigger model or longer training may behave differently.

@@ -643,6 +643,13 @@ Real Muon runs the same loop in bfloat16 on the GPU.
 - **Pushing them somewhat less costs nothing measurable.** p = 0, 0.25 and 0.5 are within 0.008 of each other; changing only the seed moves a result by 0.03.
 - **So Muon's band of 0.68 to 1.20 is enough.** It is far more even than p = 0.5, which already tied with exact equality. Reaching exactly 1 would cost more rounds and, at this size, buy nothing.
 
+**Related work.** Two 2026 papers ran the same power p on bigger models:
+
+- **Qi et al. (February 2026),** GPT-2 124M: p = 1/4 reached 2.876, Muon (p = 0) 2.887. A small gap, like ours. p = 1 was unstable.
+- **Dong and Sawin, Muon^p (June 2026),** 135M to 3B: for training from scratch, p = 0 beat p = 1/3; for fine-tuning, p = 1/3 won. In a p sweep on a 360M model, losses stayed within 0.01 of each other.
+
+Both agree with us that p between 0 and 0.5 changes the loss very little. They disagree on which side wins, so the small differences depend on the setup. A third paper, Magakyan, Parrilo and Ozdaglar (June 2026), measured how update strengths shrink as models grow from 77M to 2.8B: for most layers slowly enough that 5 rounds stay enough, for a few late layers fast enough that 5 rounds may fail at frontier scale.
+
 Every run, the full setup, limits and how to rerun it: [experiments/exp2-equal-push.md](experiments/exp2-equal-push.md).
 
 ## Run it
