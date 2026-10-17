@@ -186,3 +186,26 @@ At each layer, the cosine between the hidden state of "rare" and "translated", a
 Ops learned from scratch first memorize their training pairs, then generalize (grokking). The rare op with a partner generalizes almost as soon as it fits: it reuses a rule instead of building one.
 
 **Limits.** Four models, seed 0. Cosines are an average over held-out pairs; they show the rewrite, not the circuit that does it.
+
+## Is the rare op stuck in Muon's weak directions?
+
+**Question.** The usual story: rare data gives weak gradient directions, and Muon helps rare data by pushing weak directions as hard as strong ones. Is that what happens here?
+
+**Setup** ([spectrum.py](spectrum.py), [spectrum.jsonl](spectrum.jsonl), chart from [plot_spectrum.py](plot_spectrum.py)). Muon p = 0, rare op at 4%, with and without its partner, both orders, seed 0. At 8 moments in training, each op's gradient on 1024 of its training pairs, weighted by its batch share; together they add to the expected batch gradient G. Measured against G's singular directions:
+
+- how much of the rare op's gradient lies in G's strongest 10% of directions;
+- how much one step lowers the rare op's loss, for exact Muon (all directions pushed equally) vs the plain gradient direction (G scaled to the same size).
+
+![rare op in the spectrum](../images/arith_spectrum.png)
+
+(layer h1; the other two layers look the same, see spectrum.jsonl)
+
+**What it means.**
+
+- **At the start, yes: the rare op lives in weak directions.** Steps 10–300: 25–60% of its gradient is in the strongest 10% of directions, against 71–84% for a common op. 12–20% is in the weakest half (common ops: 4–8%).
+- **But Muon gives it no extra push then.** Exact Muon vs plain direction: 0.6–1.2× on the rare op in 6 of 8 early points.
+- **Once the common ops are learned, the rare op takes over the strong directions.** The common ops' gradients shrink, so by step 600–1000 the rare op holds 70–96% of its gradient in the top 10%. It is no longer a weak-direction problem.
+- **That is where Muon helps: 1.5–7× more descent on the rare op** than the plain direction, from step 600 to 2000. Plain gradient direction piles the step onto the one or two strongest directions; Muon spreads it over all of them, and the rare op's gradient is spread over many.
+- **Without the partner, the rare op gets the same push and wastes it.** Same top-10% share, same 1–5× ratio, yet held-out stays at 2–4% and train reaches only 17–25%. The optimizer delivers the step; only the partner turns it into a rule.
+
+**Limits.** One seed, one rare frequency. "Descent" is the first-order loss drop for one step, not what momentum and later steps make of it.
