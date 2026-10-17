@@ -204,7 +204,17 @@ The s⁵ term grows fastest. Above about 1.2 it wins, and the curve shoots up. I
 
 ### Why divide by the size
 
-The ideal divisor would be the biggest strength. The biggest strength would then become exactly 1. But finding the biggest strength needs the SVD again. So Muon divides by a number it can get from the entries alone, the size:
+Dividing G by a number divides every strength by that number. Which number is best? Take a G with strengths 1.00 and 0.20 and try three divisors:
+
+| divide by | strengths after | what happens |
+|---|---|---|
+| 0.5, smaller than the biggest strength | 2.00 and 0.40 | 2.00 is above 1.2, and one round sends it to 33.7 |
+| 5, much bigger | 0.20 and 0.04 | safe, but red starts lower: 3 rounds to pass 0.7 |
+| 1.00, the biggest strength | 1.00 and 0.20 | safe, and red passes 0.7 after 2 rounds |
+
+Dividing by less than the biggest strength pushes it above 1, into the range where the curve explodes. Dividing by more than it is safe, but shrinks every strength further from 1, and each extra shrink costs rounds. So the best divisor is the biggest strength itself: it is the smallest divisor that keeps everything at 1 or below.
+
+But finding the biggest strength needs the SVD again. So Muon divides by a number it can get from the entries alone, the size:
 
 1. Square every entry of G and add them up. Here 0.750 + 0.010 + 0.250 + 0.030 = 1.040.
 2. Take the square root. √1.040 = 1.020.
