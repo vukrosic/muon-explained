@@ -120,6 +120,17 @@ def panel5_linear(a):                             # chart 5 on linear axes, on M
     a.legend()
 
 
+def panel6_linear(a):                             # chart 6 on linear axes, same layout as panel5_linear
+    v = S[900]; n = len(v)
+    for p in P[::-1]:
+        w = v ** p; w = w * np.sqrt(n) / np.linalg.norm(w)
+        lab = {0: "p = 0 (Muon): all = 1", 1: "p = 1: gradient as it is"}.get(p, f"p = {p:g}")
+        a.plot(np.arange(1, n + 1), w, color=COL[p], lw=2.5, label=lab)
+    a.set(xlabel="singular value number (1 = largest)", ylabel="singular value after S becomes S^p (same total size)",
+          title="4. What p does to the singular values", ylim=(0, None), xlim=(0, n + 1))
+    a.legend()
+
+
 PANELS = [panel1, panel2, panel3, panel4, panel5, panel6]
 fig, ax = plt.subplots(2, 3, figsize=(17, 10))
 for f, a in zip(PANELS, ax.flat):
@@ -128,7 +139,7 @@ fig.tight_layout()
 out = os.path.join(HERE, "..", "images", "exp2_explore.png")
 fig.savefig(out, dpi=110)
 print(out)
-for i, f in [*enumerate(PANELS, 1), ("5_linear", panel5_linear)]:   # each chart also as its own square image
+for i, f in [*enumerate(PANELS, 1), ("5_linear", panel5_linear), ("6_linear", panel6_linear)]:   # each chart also as its own square image
     with plt.rc_context({"font.size": 13}):
         fig, a = plt.subplots(figsize=(7, 7))
         f(a)
