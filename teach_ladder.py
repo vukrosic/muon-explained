@@ -1,6 +1,6 @@
 """Section 2 ladder: why X·Xᵀ·X cubes the strengths, and how the curve's three numbers are built up.
 
-images/idea1.png … idea5.png, idea3a.png  why s alone fails, why s³ and then s⁵ are added
+images/idea1.png … idea5.png, idea3a.png, idea3b.png  why s alone fails, why s³ and then s⁵ are added
 images/chain.png            the 9 moves of X·Xᵀ·X on a circle; the middle turns undo each other
 images/curve1.png … curve3.png  the curve f(s) built one term at a time
 images/xx_fail.png          X, X·X and X·Xᵀ·X side by side: only X·Xᵀ·X keeps X's arrows
@@ -163,6 +163,43 @@ fig.suptitle("Green dashed circle = the goal: both arrows should end on it (leng
              "Multiplying X by a number a makes the whole shape a times bigger, so BOTH arrows grow by a. "
              "Red needs 5.10, blue needs 1.02.", fontsize=14)
 fig.tight_layout(rect=[0, 0, 1, 0.9]); fig.savefig("images/idea3a.png"); plt.close(fig)
+
+# step 3b: one number a, applied to many strengths, gives dots on a straight line
+A3 = 1 / RED
+fig, axs = plt.subplots(1, 3, figsize=(19, 6.6), dpi=130)
+few = [(0.1, INK, ""), (RED, WEAK, "red "), (0.5, INK, ""), (BLUE, BIG, "blue ")]
+many = np.round(np.arange(0, 1.0001, 0.05), 2)
+for k, ax in enumerate(axs):
+    ax.set_xlim(0, 1.05); ax.set_ylim(0, 5.6); ax.axhline(1, ls="--", color=MUTE, lw=1)
+    ax.set_xlabel("s = strength going in"); ax.set_ylabel("strength coming out = 5.10 × s")
+    if k == 0:
+        for x, col, nm in few:
+            ax.plot(x, A3 * x, "o", color=col, ms=11, zorder=5)
+            right = x > 0.7
+            ax.text(x - 0.03 if right else x + 0.03, A3 * x, f"{nm}{x} → {A3 * x:.2f}", color=col, fontsize=13,
+                    fontweight="bold", va="center", ha="right" if right else "left",
+                    bbox=dict(facecolor="white", edgecolor="none", pad=1))
+        ax.set_title("1. Four strengths, each multiplied by 5.10.\nEach one is a dot: across = in, up = out.", fontsize=13)
+    elif k == 1:
+        ax.plot(many, A3 * many, "o", color=INK, ms=7, zorder=4)
+        for x, col, nm in few[1::2]:
+            ax.plot(x, A3 * x, "o", color=col, ms=11, zorder=5)
+        ax.set_title("2. Every strength from 0 to 1 in steps of 0.05.\nEach step right adds 5.10 × 0.05 = 0.255 up.", fontsize=13)
+        for x in (0.6, 0.65):
+            ax.annotate("", xy=(x + 0.05, A3 * x), xytext=(x, A3 * x), arrowprops=dict(arrowstyle="-", color=MUTE, lw=1.5))
+        ax.annotate("", xy=(0.65, A3 * 0.65), xytext=(0.65, A3 * 0.6), arrowprops=dict(arrowstyle="-|>", color=MUTE, lw=1.5))
+        ax.text(0.665, A3 * 0.625, "+0.255", fontsize=11, color=MUTE, va="center")
+    else:
+        ax.plot(xs, A3 * xs, color=INK, lw=3, zorder=3)
+        ax.plot(many, A3 * many, "o", color=INK, ms=5, zorder=4, alpha=0.5)
+        for x, col, nm in few[1::2]:
+            ax.plot(x, A3 * x, "o", color=col, ms=11, zorder=5)
+            ax.text(x + 0.03 if x < 0.5 else x - 0.03, A3 * x, f"{nm}→ {A3 * x:.2f}", color=col, fontsize=13,
+                    fontweight="bold", va="center", ha="left" if x < 0.5 else "right")
+        ax.set_title("3. Same step up for every step right:\nthe dots form a straight line. It shows\nwhat 5.10 does to ANY strength.", fontsize=13)
+fig.suptitle("Where the straight line comes from: multiply many strengths by the same number 5.10 and mark each result as a dot",
+             fontsize=15, fontweight="bold")
+fig.tight_layout(rect=[0, 0, 1, 0.93]); fig.savefig("images/idea3b.png"); plt.close(fig)
 
 # step 3: s alone is a straight line
 fig, ax = idea_axes("With s alone, the only option is a·s: multiply every strength by the same number a.\n"

@@ -158,7 +158,20 @@ Which a should Muon pick? Try the two obvious ones:
 
 ![Step 3: X, 1.02·X and 5.10·X; whichever arrow a is chosen for reaches the circle, the other does not](images/idea3a.png)
 
-On the curve plot, "multiply every strength by a" is a straight line through 0 with slope a: out = a × s. Neither line is flat at 1. So one number cannot work; Muon needs a way to grow small strengths more than big ones.
+**Where the straight line comes from.** The next steps draw each choice as a line on a plot, so here is how a single number turns into a line.
+
+Our X has only two strengths, but a real weight matrix has hundreds, anywhere between 0 and 1. So the question is not only "what does 5.10 do to red and blue" but "what does 5.10 do to every possible strength". Answer it one strength at a time and mark each answer as a dot: across = the strength going in, up = the strength coming out.
+
+- 0.1 goes in, 5.10 × 0.1 = 0.51 comes out: a dot at (0.1, 0.51).
+- Red: 0.196 goes in, 1.00 comes out: a dot at (0.196, 1.00).
+- 0.5 goes in, 2.55 comes out: a dot at (0.5, 2.55).
+- Blue: 0.981 goes in, 5.01 comes out: a dot at (0.981, 5.01).
+
+Now do it for every strength from 0 to 1 in steps of 0.05. Each step of 0.05 to the right adds the same 5.10 × 0.05 = 0.255 upward. Same step up for every step right means the dots sit on a straight line. Join them, and the line answers the question for any strength at once: find the strength on the bottom axis, go up to the line, read the result.
+
+![The straight line: dots for 4 strengths, then for every strength in steps of 0.05, then joined into a line](images/idea3b.png)
+
+So "multiply X by one number a" and "a straight line through 0" are the same thing, drawn two ways. A bigger a gives a steeper line. Here are both choices from above as lines. The goal is the flat dashed line at 1. Neither straight line is flat, and no a can make one flat: a straight line through 0 always sends small strengths to small results. So Muon needs a way to grow small strengths more than big ones.
 
 ![Step 3, as curves: 5.10·s fixes red and breaks blue; 1.02·s fixes blue and leaves red small](images/idea3.png)
 
@@ -455,7 +468,7 @@ python3 teach.py          # images/step1.png … step4.png
 python3 teach_directions.py  # images/step1b_directions.png
 python3 teach_steps.py    # images/move0.png … move4.png
 python3 teach_series.py   # images/tst1.png … tst4.png, cube.png, round1.png … round5.png
-python3 teach_ladder.py   # images/idea1.png … idea5.png, idea3a.png, chain.png, xx_fail.png, curve1.png … curve3.png
+python3 teach_ladder.py   # images/idea1.png … idea5.png, idea3a.png, idea3b.png, chain.png, xx_fail.png, curve1.png … curve3.png
 python3 plot_poly.py      # images/poly_plot.png
 python3 intro_plots.py    # images/muon_timeline.png, muon_numbers.png
 ```
