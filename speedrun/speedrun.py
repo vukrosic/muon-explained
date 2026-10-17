@@ -1,27 +1,34 @@
-"""Laptop speedrun: reach the target validation loss in the least training time.
+"""Laptop speedrun: the lowest validation loss after a fixed number of training tokens.
 
-Fixed: data, model, batch size 512, seed 0, 8 CPU threads, and how validation loss is measured.
-Free: everything in the OPTIMIZER section (which optimizer, rounds, learning rates, momentum,
-schedule, number of steps). Rules and records: README.md.
+Fixed: data, model, batch size 512, 1000 steps (512,000 predictions), seed 0, how validation loss is measured,
+and a compute cap: the whole training run may use at most as many matrix-multiply FLOPs as the baseline
+(Muon, 5 rounds). Matrix decompositions (SVD, eigh, QR, ...) are not allowed.
+Free: everything in the OPTIMIZER section. Rules and records: README.md.
+The score does not depend on how fast or busy the computer is: same settings, same loss and FLOPs on every run.
 Usage: python3 speedrun.py "short description of the change"
 """
 import json, os, sys, time, datetime
 import torch
 import torch.nn.functional as F
+from torch.utils.flop_counter import FlopCounterMode
+from torch.utils._python_dispatch import TorchDispatchMode
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "experiments"))
 from train import Net, batch, train, val, CTX, PYTHON   # same data and model as the experiments
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-TARGET = 1.68
 SEED = 0
+STEPS = 1000                                             # fixed: 1000 steps x 512 examples
+BASELINE_GFLOP = 14646.5                                   # compute cap, measured from the baseline below
+BANNED = {"svd", "_svd_helper", "symeig", "eig", "qr", "geqrf", "cholesky", "cholesky_inverse", "lu_solve",
+          "triangular_solve", "inverse", "pinverse", "matrix_exp", "lstsq", "matrix_power"}
 
 
 # ---------------------------------------------------------------- OPTIMIZER (edit freely) ----
-STEPS = 1000
-MUON_LR, ADAM_LR, BETA = 0.01, 3e-3, 0.95
-ROUNDS = 3
-DECAY = 0.5                                              # share of steps at the end over which lr falls to 0
+MUON_LR, ADAM_LR, BETA = 0.02, 0.036, 0.95
+ROUNDS = 2
+WD, ADAM_BETAS = 0.05, (0.9, 0.999)                         # Muon weight decay (decoupled), AdamW betas
+DECAY = 0.85                                             # share of steps at the end over which lr falls to 0
 ABC = (3.4445, -4.775, 2.0315)
 COEFS = None                                             # optional list of (a, b, c), one per round
 SPEC = 0                                                 # 0: divide by total size; k > 0: by the largest strength, k power steps
@@ -46,7 +53,7 @@ def flatten(G, v=None):
 
 def optimize(m, g):
     muon_ps = [m.inp.weight, m.h1.weight, m.h2.weight]
-    adam = torch.optim.AdamW([m.emb.weight, m.out.weight, m.out.bias], lr=ADAM_LR, weight_decay=0)
+    adam = torch.optim.AdamW([m.emb.weight, m.out.weight, m.out.bias], lr=ADAM_LR, betas=ADAM_BETAS, weight_decay=0)
     mom = [torch.zeros_like(p) for p in muon_ps]
     vecs = [torch.ones(p.shape[1]) / p.shape[1] ** 0.5 for p in muon_ps]
     for step in range(STEPS):
@@ -60,6 +67,7 @@ def optimize(m, g):
         with torch.no_grad():
             for p, buf, v in zip(muon_ps, mom, vecs):
                 buf.mul_(BETA).add_(p.grad)
+                p.mul_(1 - WD * MUON_LR * sched)
                 p.add_(flatten(p.grad + BETA * buf, v), alpha=-MUON_LR * sched)   # Nesterov momentum
 # --------------------------------------------------------------------- end of OPTIMIZER ----
 
@@ -74,21 +82,34 @@ def full_val(m):
     return tot / len(idx)
 
 
+class Guard(TorchDispatchMode):
+    """Refuses matrix decompositions; every other op runs as usual."""
+    def __torch_dispatch__(self, func, types, args=(), kwargs=None):
+        name = func._schema.name.split("::")[-1]       # e.g. "mm", "_linalg_svd", "linalg_vector_norm"
+        if name.lstrip("_") in BANNED or ("linalg" in name and "norm" not in name):
+            raise RuntimeError(f"not allowed in the speedrun: {func.__name__}")
+        return func(*args, **(kwargs or {}))
+
+
 def main(desc, settings=""):
     torch.manual_seed(SEED)
     m = Net()
     g = torch.Generator().manual_seed(1000 + SEED)
+    fc = FlopCounterMode(display=False)
     t0 = time.perf_counter()
-    optimize(m, g)
+    with fc, Guard():
+        optimize(m, g)
     secs = time.perf_counter() - t0
+    gflop = fc.get_total_flops() / 1e9
     v = full_val(m)
-    hit = v <= TARGET
-    print(f"{desc:<40} train {secs:5.1f} s   val {v:.4f}   {'REACHED' if hit else 'missed'}", flush=True)
-    rec = dict(desc=desc, settings=settings, seconds=round(secs, 2), val=round(v, 5), reached=hit, seed=SEED,
-               python=PYTHON, torch=torch.__version__, when=datetime.datetime.now().isoformat(timespec="seconds"))
+    ok = gflop <= BASELINE_GFLOP * 1.0001
+    print(f"{desc:<48} val {v:.4f}   {gflop:7.0f} GFLOP ({gflop / BASELINE_GFLOP:.0%} of cap){'' if ok else '  OVER CAP'}"
+          f"   [{secs:.1f} s, not scored]", flush=True)
+    rec = dict(desc=desc, settings=settings, val=round(v, 5), gflop=round(gflop, 1), within_cap=ok, seconds=round(secs, 2),
+               seed=SEED, python=PYTHON, torch=torch.__version__, when=datetime.datetime.now().isoformat(timespec="seconds"))
     with open(os.path.join(HERE, "runs.jsonl"), "a") as f:
         f.write(json.dumps(rec) + "\n")
-    return secs, v
+    return v, gflop
 
 
 if __name__ == "__main__":
