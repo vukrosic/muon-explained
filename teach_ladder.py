@@ -2,6 +2,7 @@
 
 images/chain.png            the 9 moves of X·Xᵀ·X on a circle; the middle turns undo each other
 images/curve1.png … curve3.png  the curve f(s) built one term at a time
+images/xx_fail.png          X, X·X and X·Xᵀ·X side by side: only X·Xᵀ·X keeps X's arrows
 """
 import numpy as np
 import matplotlib
@@ -59,6 +60,30 @@ fig.suptitle("X·Xᵀ·X, one move at a time (applied left to right, top row fir
              "0.981 → 0.944, 0.196 → 0.0075.", fontsize=13.5)
 fig.subplots_adjust(left=0.02, right=0.98, bottom=0.02, top=0.84, wspace=0.1, hspace=0.32); fig.savefig("images/chain.png"); plt.close(fig)
 assert np.allclose(panels[-1][0], U @ S ** 3 @ V.T)
+
+# ---------- X·X turns the arrows, X·Xᵀ·X keeps them ----------
+X = U @ S @ rot(-40).T  # first turn +40° here: X·X then misses X's arrows by 23°, easy to see
+cases = [(X, "X", "our matrix"),
+         (X @ X, "X·X", "the arrows point somewhere new"),
+         (X @ X.T @ X, "X·Xᵀ·X", "same arrows as X, strengths cubed")]
+fig, axs = plt.subplots(1, 3, figsize=(17, 6.6), dpi=130)
+for a, (M, name, sub) in zip(axs, cases):
+    pts = M @ circle
+    a.fill(pts[0], pts[1], color=FILL, zorder=1); a.plot(pts[0], pts[1], color=INK, lw=1.8, zorder=2)
+    for i in (0, 1):  # X's own arrow directions, as dashed guide lines
+        d = U[:, i] * 1.15
+        a.plot([-d[0], d[0]], [-d[1], d[1]], ls="--", color=MUTE, lw=1.2, zorder=0)
+    u, sv, _ = np.linalg.svd(M)
+    for i, col in [(0, BIG), (1, WEAK)]:
+        v = u[:, i] * sv[i]
+        if v @ U[:, i] < 0: v = -v
+        a.annotate("", xy=v, xytext=(0, 0), zorder=3, arrowprops=dict(arrowstyle="-|>", color=col, lw=2.8))
+    a.text(0, -1.2, f"blue {sv[0]:.3f}", ha="right", color=BIG, fontsize=13, fontweight="bold")
+    a.text(0.08, -1.2, f"red {sv[1]:.4f}", ha="left", color=WEAK, fontsize=13, fontweight="bold")
+    a.set_xlim(-1.2, 1.2); a.set_ylim(-1.3, 1.2); a.set_aspect("equal"); a.set_xticks([]); a.set_yticks([])
+    a.set_title(f"{name}\n{sub}", fontsize=15)
+fig.suptitle("Dashed lines = the directions of X's arrows. X·X leaves them. X·Xᵀ·X stays on them.", fontsize=15)
+fig.tight_layout(rect=[0, 0, 1, 0.93]); fig.savefig("images/xx_fail.png"); plt.close(fig)
 
 # ---------- the curve, one term at a time ----------
 a_, b_, c_ = 3.4445, -4.775, 2.0315

@@ -128,36 +128,61 @@ Our G is built exactly this way: a stretch by 1.00 and 0.20, then a 30° turn. I
 
 ### Why not compute U, S and V directly
 
-The textbook tool that finds U, S and V is the singular value decomposition (SVD). Muon's author tried it. It is far too slow to run on every weight matrix at every training step. A GPU is fastest at one job, multiplying matrices. So Muon only multiplies. The next five parts show, one step at a time, how multiplying alone changes the strengths and leaves the arrows where they are.
+The textbook tool that finds U, S and V is the singular value decomposition (SVD). Muon's author tried it. It is far too slow to run on every weight matrix at every training step. A GPU is fastest at one job, multiplying matrices. So Muon only multiplies. The next parts show, one step at a time, how multiplying alone changes the strengths and leaves the arrows where they are.
 
 Two names first:
 
 - **X** is the matrix Muon works on. It starts as G divided by its size (step 0, further down). For our G, X stretches by 0.981 and 0.196.
 - **s** stands for one strength of X. Our X has two: s = 0.981 (blue) and s = 0.196 (red).
 
-### Xᵀ runs X's moves backwards
+### The idea: build a curve out of powers
 
-X = U·S·Vᵀ does three moves. Matrices act from right to left, so X first turns by Vᵀ, then stretches by S, then turns by U.
+Muon cannot reach into X and set each strength to 1. But suppose it could make two more matrices with the same arrows as X, one with every strength cubed (s³) and one with every strength to the fifth power (s⁵). Then it could add the three up and get, for each strength, 3.4445·s − 4.775·s³ + 2.0315·s⁵. With the right three numbers, that sum is close to 1 for every s between 0 and 1. So the job is to make s³ out of X, using only multiplication, without moving the arrows.
 
-Xᵀ is X with rows and columns swapped. It equals V·S·Uᵀ. So Xᵀ first turns by Uᵀ, which undoes U. Then it stretches by the same S. Then it turns by V, which undoes Vᵀ.
+### The obvious try, X·X·X, fails
 
-### X·Xᵀ·X cubes every strength
+To cube a plain number, multiply it by itself: 0.196 · 0.196 · 0.196 = 0.0075. The same idea fails for a matrix. Even X·X goes wrong.
 
-X·Xᵀ·X means: do X, then Xᵀ, then X again. That is 9 moves. The picture does them one at a time on a circle. It uses our strengths 0.981 and 0.196. Our G has a first turn of 0°, so the picture uses −50° to make every turn visible.
+X is three moves: turn, stretch, turn. (Matrices act from right to left, so in U·S·Vᵀ the turn Vᵀ happens first, then the stretch S, then the turn U.) X·X is turn, stretch, turn, turn, stretch, turn. The two turns in the middle, U and then Vᵀ, have nothing to do with each other, so they do not cancel. They turn the ellipse between the two stretches, and the result points somewhere new. Its strengths are not 0.981² and 0.196² either, but 0.407 and 0.091.
+
+![X, X·X and X·Xᵀ·X: X·X leaves the dashed lines of X's arrows, X·Xᵀ·X stays on them](images/xx_fail.png)
+
+### The fix: Xᵀ, which runs X's turns backwards
+
+The turns between the stretches have to cancel. Muon needs a matrix that starts by undoing X's last turn. That matrix is Xᵀ.
+
+Xᵀ is X with rows and columns swapped. Swapping runs X's moves in reverse order and reverses each turn:
+
+```
+X   =  U · S · Vᵀ       turn by Vᵀ,  stretch by S,  turn by U
+Xᵀ  =  V · S · Uᵀ       turn back by Uᵀ,  stretch by S,  turn back by V
+```
+
+The stretch is not reversed. Xᵀ stretches by the same S again.
+
+### Why three: X, then Xᵀ, then X
+
+Follow the moves:
+
+1. **X**: turn by Vᵀ, stretch, turn by U.
+2. **Xᵀ**: its first turn Uᵀ cancels U. Then it stretches a second time. Then it turns by V. The shape is now stretched twice, but X's last turn U is gone.
+3. **X again**: its first turn Vᵀ cancels that V. Then it stretches a third time and turns by U, which brings back X's last turn.
+
+What is left is X's first turn Vᵀ, three stretches, and X's last turn U. The X at each end supplies one of X's two turns. The Xᵀ in the middle makes the turns between them cancel. Each of the three brings one stretch, so each strength is multiplied by itself 3 times.
+
+Here are the 9 moves one at a time, with our strengths 0.981 and 0.196. Our G has no first turn, so the picture adds one of −50° to make every turn visible.
 
 ![X·Xᵀ·X as 9 moves on a circle: moves 4 and 7 undo the turn before them; three stretches remain](images/chain.png)
 
-Move 4 undoes move 3. Move 7 undoes move 6. What is left is the turn Vᵀ, three stretches by S, and the turn U. In symbols:
+In symbols:
 
 ```
 X·Xᵀ·X  =  U·S·Vᵀ · V·S·Uᵀ · U·S·Vᵀ
-        =  U·S·S·S·Vᵀ            Vᵀ·V and Uᵀ·U undo each other
+        =  U·S·S·S·Vᵀ            Vᵀ·V and Uᵀ·U cancel
         =  U·S³·Vᵀ
 ```
 
-The turns are the same as X's. Each strength is cubed: 0.981 becomes 0.944, and 0.196 becomes 0.0075.
-
-The Xᵀ in the middle is what makes the undoing work. X·X·X would put U right before Vᵀ. Those two turns do not undo each other, so the arrows would move.
+The turns are the same as X's. 0.981 becomes 0.944, and 0.196 becomes 0.0075.
 
 The formula at the top writes the same product as (XXᵀ)X. Here it is as three shapes:
 
@@ -165,11 +190,17 @@ The formula at the top writes the same product as (XXᵀ)X. Here it is as three 
 
 ### Two more moves give the fifth power
 
-Multiply by Xᵀ and X once more: (XXᵀ)²X = X·Xᵀ·X·Xᵀ·X = U·S⁵·Vᵀ. Two more turns undo each other and two more stretches pile up. Red becomes 0.196⁵ = 0.0003.
+**Why we need a fifth power.** s and s³ alone are not enough. A curve a·s + b·s³ that rises as steeply as 3.4445 near 0 and ends at 0.7 at s = 1 must bulge up to 1.49 in between. A third term, s⁵, lets the curve rise just as steeply and then flatten out: the curve Muon uses never goes above 1.20. It is built term by term two parts below.
+
+**How to get it.** The same trick, one pair longer: (XXᵀ)²X = X·Xᵀ·X·Xᵀ·X = U·S⁵·Vᵀ. Each extra Xᵀ·X pair adds two turns that cancel and two more stretches. Red becomes 0.196⁵ = 0.0003.
+
+**Why only odd powers.** An even number of X's cannot keep X's arrows. X·Xᵀ = U·S²·Uᵀ starts with the turn Uᵀ and ends with U, but X starts with Vᵀ. The X at each end is what supplies X's two turns, so the count is always odd: 1, 3, 5.
 
 ### Adding them gives a curve
 
-X, (XXᵀ)X and (XXᵀ)²X all have the same turns. When two matrices have the same turns, adding them adds their strengths. So the formula
+**Why add them.** Muon wants one matrix whose strengths are a chosen curve of X's strengths. A sum of s, s³ and s⁵ with three chosen numbers can take many shapes, and the next part picks the shape that ends near 1.
+
+**Why adding works.** X, (XXᵀ)X and (XXᵀ)²X all have the same turns. Two matrices with the same turns differ only in their stretches, so adding them adds the stretches: U·a·Vᵀ + U·b·Vᵀ = U·(a+b)·Vᵀ, like 3 apples + 5 apples = 8 apples. So the formula
 
 ```
 3.4445·X  −  4.775·(XXᵀ)X  +  2.0315·(XXᵀ)²X
@@ -192,6 +223,8 @@ For red, s = 0.196:
 
 For blue, s = 0.981: 3.379 − 4.508 + 1.846 = 0.717.
 
+Muon never computes s. It only multiplies and adds whole matrices. The curve happens to every strength at once, as a side effect.
+
 ### Why these three numbers
 
 Each term has its own job. Here the curve is built one term at a time.
@@ -206,12 +239,16 @@ Each term has its own job. Here the curve is built one term at a time.
 - **−4.775** pulls big strengths down. s³ is tiny for small s but close to s near 1.
 - **2.0315** lifts big strengths back up, so they do not fall too far.
 
-Keller Jordan, Muon's author, tuned the three numbers. He made the first one as large as he could. He set the other two so that every strength, after 5 rounds, lands between about 0.7 and 1.2. Section 5 compares this with the older textbook choice, 1.5 and −0.5.
+Keller Jordan, Muon's author, tuned the three numbers.
+
+- **Why make the first number big.** Near 0 the curve multiplies a strength by about 3.4445 each round. After step 0 many strengths of a real update are far below 1: 0.036 in the 768×768 example further down, and less for rare directions. The bigger this number, the fewer rounds they need. With 3.4445, a strength of 0.005 goes 0.017, 0.059, 0.203, 0.661, 1.154 in 5 rounds.
+- **Why not bigger still.** A steeper start makes the curve bulge higher before it comes back down near 1. Then strengths bounce further from 1.
+- **Why not end exactly at 1.** A curve that sends 1 exactly to 1 has to start flatter. The older textbook choice, 1.5 and −0.5, does this, and small strengths grow only 1.5× per round. Muon's author accepts strengths between about 0.7 and 1.2 instead, and reports that this did not hurt training. Section 5 compares the two.
 
 ### The plan
 
-1. Step 0: divide G by its size, so every strength is 1 or less. The next three parts explain why.
-2. Rounds 1 to 5: apply the formula. Each round feeds every strength through f(s).
+1. Step 0: divide G by its size, so every strength is 1 or less. The curve only behaves for strengths up to about 1.2; the next three parts explain this.
+2. Rounds 1 to 5: apply the formula. Each round feeds every strength through f(s). One round is not enough because a small strength grows only about 3.4× per round. Five rounds lift anything from 0.005 up into 0.68–1.15 (section 5). More rounds would cost 3 more multiplications each.
 
 [Section 3](#3-step-1-one-round-on-our-matrix) runs round 1 on our matrix. [Section 4](#4-repeat-5-times) runs all 5.
 
@@ -373,7 +410,7 @@ python3 teach.py          # images/step1.png … step4.png
 python3 teach_directions.py  # images/step1b_directions.png
 python3 teach_steps.py    # images/move0.png … move4.png
 python3 teach_series.py   # images/tst1.png … tst4.png, cube.png, round1.png … round5.png
-python3 teach_ladder.py   # images/chain.png, curve1.png … curve3.png
+python3 teach_ladder.py   # images/chain.png, xx_fail.png, curve1.png … curve3.png
 python3 plot_poly.py      # images/poly_plot.png
 python3 intro_plots.py    # images/muon_timeline.png, muon_numbers.png
 ```
