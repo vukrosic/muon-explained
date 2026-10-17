@@ -14,10 +14,14 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 N = int(os.environ.get("N", 97))                          # numbers 0..N-1, answers modulo N
-FREQ = [0.55, 0.30, 0.12, 0.03]                           # share of each batch, most common op first
+FREQ = [float(f) for f in os.environ.get("FREQ", "0.55,0.30,0.12,0.03").split(",")]   # share of each batch, most common op first
 STEPS, B, EVERY = int(os.environ.get("STEPS", 3000)), 512, 50
 MUON_LR, ADAM_LR, BETA, DECAY = 0.02, 0.01, 0.95, 0.5
 WD = float(os.environ.get("WD", 0.05))                    # Muon weight decay, multiplied by lr
+OPT = os.environ.get("OPT", "muon")                       # "adam": AdamW on the 3 hidden matrices too, lr HID_LR
+HID_LR = float(os.environ.get("HID_LR", 0.001))
+CONST = os.environ.get("CONST") == "1"                    # 1: no learning-rate decay
+OUT = os.environ.get("OUT", "arith.jsonl")
 HERE = os.path.dirname(os.path.abspath(__file__))
 OPS = {"+": lambda a, b: (a + b) % N, "-": lambda a, b: (a - b) % N, "*": lambda a, b: (a * b) % N,
        "/": lambda a, b: (a * pow(b, N - 2, N)) % N}
@@ -56,10 +60,11 @@ def shaped(G, p):
     G = G.double()
     try:
         U, s, Vh = torch.linalg.svd(G, full_matrices=False)
-    except torch._C._LinAlgError:                           # LAPACK rarely fails to converge: retry with a tiny jitter
-        U, s, Vh = torch.linalg.svd(G + 1e-9 * G.norm() * torch.randn_like(G), full_matrices=False)
-    U, s, Vh = U.float(), s.float(), Vh.float()
-    O = (U * s.clamp_min(1e-30) ** p) @ Vh
+        O = ((U * s.clamp_min(1e-30) ** p) @ Vh).float()
+    except torch._C._LinAlgError:                           # LAPACK rarely fails to converge: same result via eigh of G^T G
+        e, V = torch.linalg.eigh(G.T @ G)
+        s = e.clamp_min(0).sqrt().clamp_min(1e-12 * G.norm())
+        O = ((G @ V) * s ** (p - 1) @ V.T).float()
     return O * (min(G.shape) ** 0.5 / (O.norm() + 1e-12))  # same total size as exact Muon
 
 
@@ -74,6 +79,7 @@ def main(p, order, seed):
     m = Net()
     muon = [m.inp.weight, m.h1.weight, m.h2.weight]
     adam = torch.optim.AdamW([m.emb.weight, m.out.weight, m.out.bias], lr=ADAM_LR, weight_decay=0)
+    hid = torch.optim.AdamW(muon, lr=HID_LR, weight_decay=WD) if OPT == "adam" else None
     mom = [torch.zeros_like(w) for w in muon]
     freq = torch.tensor(FREQ)
     log = []
@@ -83,7 +89,7 @@ def main(p, order, seed):
             log.append(dict(step=step, train=[round(acc(m, r), 4) for r in tr], test=[round(acc(m, r), 4) for r in te]))
         if step == STEPS:
             break
-        sched = min(1.0, (1 - step / STEPS) / DECAY)
+        sched = 1.0 if CONST else min(1.0, (1 - step / STEPS) / DECAY)
         k = torch.multinomial(freq, B, replacement=True, generator=gen)          # which op each example uses
         x = torch.cat([tr[i][torch.randint(len(tr[i]), (int((k == i).sum()),), generator=gen)] for i in range(4)])
         loss = F.cross_entropy(m(x[:, :3]), x[:, 3])
@@ -91,6 +97,11 @@ def main(p, order, seed):
         for gr in adam.param_groups:
             gr["lr"] = ADAM_LR * sched
         adam.step()
+        if hid:
+            for gr in hid.param_groups:
+                gr["lr"] = HID_LR * sched
+            hid.step()
+            continue
         with torch.no_grad():
             for w, buf in zip(muon, mom):
                 buf.mul_(BETA).add_(w.grad)
@@ -98,14 +109,15 @@ def main(p, order, seed):
                 w.add_(shaped(w.grad + BETA * buf, p), alpha=-MUON_LR * sched)
     secs = time.perf_counter() - t0
     end = log[-1]
-    print(f"p={p:g} order={order} seed={seed}  " + "  ".join(
+    print(f"{OPT} p={p:g} order={order} seed={seed}  " + "  ".join(
         f"{op}({f:.0%}) train {a:.2f} test {b:.2f}" for op, f, a, b in zip(order, FREQ, end["train"], end["test"]))
-        + f"   N={N} WD={WD:g} [{secs:.0f} s]", flush=True)
+        + f"   N={N} WD={WD:g}{' const' if CONST else ''} [{secs:.0f} s]", flush=True)
     if os.environ.get("SAVE"):                                  # keep the model and its split for cut.py; no log line
         torch.save(dict(model=m.state_dict(), tr=tr, te=te, p=p, order=order, seed=seed), os.environ["SAVE"])
         return
-    with open(os.path.join(HERE, "arith.jsonl"), "a") as f:
-        f.write(json.dumps(dict(p=p, order=order, seed=seed, N=N, wd=WD, freq=FREQ, steps=STEPS, log=log)) + "\n")
+    with open(os.path.join(HERE, OUT), "a") as f:
+        f.write(json.dumps(dict(opt=OPT, p=p, order=order, seed=seed, N=N, wd=WD, freq=FREQ, steps=STEPS, const=CONST,
+                                hid_lr=HID_LR if OPT == "adam" else None, log=log)) + "\n")
 
 
 if __name__ == "__main__":

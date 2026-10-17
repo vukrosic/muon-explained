@@ -80,3 +80,22 @@ arith.jsonl also has 3 exploratory p = 0 runs at weight decay 1 and 3; the chart
 - **Everything shares the top directions.** Deleting the strongest 5% breaks every operation.
 
 **Limits.** One seed per order. The rare operation is only memorized, not learned as a rule, so this shows where memorized facts sit, not where rules sit.
+
+## A rare operation rides on its partner
+
+**Question.** At what frequency does a rare operation stop being memorized and start being learned as a rule?
+
+**Setup.** 3 common operations share the batch equally, 1 rare operation gets 2, 4, 8, 12, 16 or 25%. Order A: ÷ rare. Order B: + rare. Weight decay 1 for every optimizer (at 0.05 Adam memorizes everything and generalizes nothing, see [adam_lr.jsonl](adam_lr.jsonl)). Muon p = 0, Muon p = 0.5, AdamW (lr 0.003 on the hidden matrices, best of 4). 3000 steps, seed 0. Results in [freq.jsonl](freq.jsonl), [partner.jsonl](partner.jsonl), [adam_long.jsonl](adam_long.jsonl).
+
+![rare vs partner](../images/arith_partner.png)
+![rare accuracy vs frequency](../images/arith_freq.png)
+
+**What it means.**
+
+- **Frequency barely matters. The partner decides.** ÷ is × by an inverse, + is − with a sign flip. Across 56 runs the rare operation's held-out accuracy equals its partner's (correlation 0.991, mean gap 0.03), from 2% to 25% of the batch.
+- **Remove the partner and the rare operation is never learned.** With × (or −) taken out of the data, ÷ (or +) at 2% or 8% stays at 1–5% held-out for all 3 optimizers. With the partner in, Muon p = 0 reaches 49% (÷) and 92% (+) at 2%.
+- **So the rare operation is not learned on its own.** The model learns the partner, then the rare operation's few examples only need to say "this is the partner, with a twist".
+- **Muon is faster, not different.** In 3000 steps Muon p = 0 learns the partner in all 12 runs, Adam in 4. With 9000 steps Adam learns partner and rare operation too (6 of 8 settings reach 0.68–1.00). With exact SVD, 3000 Muon steps take as long as 9000 Adam steps (84 s vs 90 s).
+- **Earlier result explained.** In the first table, ÷ (3%) and × (12%) were both rare, so neither had a learned partner, and neither was ever learned as a rule.
+
+**Limits.** Seed 0 only, one task. Accuracy jumps between seeds (see the first table), so single points on the frequency chart are noisy; the partner correlation holds across all 56.
