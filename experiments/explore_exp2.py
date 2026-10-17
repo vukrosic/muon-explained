@@ -44,9 +44,9 @@ def panel1(a):
         a.plot(P, [R[key(p, BEST[p], s)]["val"] for p in P], mk, color="gray", alpha=.6, label=f"seed {s}")
     mean = [np.mean([R[key(p, BEST[p], s)]["val"] for s in (0, 1)]) for p in P]
     a.plot(P, mean, "k-", lw=2.5, label="mean of 2 seeds")
-    a.annotate("Muon:\nequal push", (0, mean[0]), (0.08, 1.685), arrowprops=dict(arrowstyle="->"))
-    a.annotate("push = raw\ngradient shape", (1, mean[3]), (0.62, 1.69), arrowprops=dict(arrowstyle="->"))
-    a.set(xlabel="p   (0 = equal push, 1 = raw gradient shape)", ylabel="final validation loss (lower = better)",
+    a.annotate("Muon: stretches all\nsingular values\nto the same size", (0, mean[0]), (0.06, 1.682), arrowprops=dict(arrowstyle="->"))
+    a.annotate("singular values left\nas in the gradient", (1, mean[3]), (0.5, 1.688), arrowprops=dict(arrowstyle="->"))
+    a.set(xlabel="p   (singular values S become S^p)", ylabel="final validation loss (lower = better)",
           title="1. Loss vs p (each p at its best learning rate)")
     a.legend()
 
