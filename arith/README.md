@@ -280,3 +280,58 @@ For rare ÷: helper i (the right one) or helper n (a control). For rare +: helpe
 - **The order fits the mechanism.** The partner has only a way in to relearn (fastest). The rare op also has its translation, the inverse or negative of b (slower). With both gone, the shared part was damaged too (slowest).
 
 **Limits.** 2 seeds. A constant learning rate made 2 of 16 relearn runs unstable late (a kept op dropped to 0.09–0.13 at the end), see relearn_full.jsonl.
+
+## Can a trained model learn a new op? Adam: no. Muon: yes
+
+**Question.** Train a model on + and − only. Then add × (12% of each batch) and train again with a full schedule. Does it learn ×?
+
+**Setup** ([forget.py](forget.py) with `SCHED=decay`, results in [late_partner.jsonl](late_partner.jsonl), [critical.jsonl](critical.jsonl), [late_act.jsonl](late_act.jsonl), [late_muon.jsonl](late_muon.jsonl)). Order A: + 55%, − 30%, × 12%, ÷ 3%. Phase 1: 9000 Adam steps with × left out. Phase 2: 9000 more steps with × added, learning rate warm again and decaying as in a fresh run. Control: the same phase 2 from a fresh, untrained model with the same data split. 2 starting seeds × 4 batch orders.
+
+| phase 2 starts from | × held-out at the end | × train at the end |
+|---|---|---|
+| fresh model | **0.43–0.91** in 7 of 8 runs (one 0.03) | 0.92–1.00 in 7 of 8 |
+| model trained on + and − | **0.02–0.03** in 8 of 8 | 0.02–0.04 |
+
+The trained model does not even memorize ×: training accuracy stays at chance. (Order B, where − is the 12% op, does not learn − even from fresh, 0.03–0.21, so it shows nothing.)
+
+**When does the door close?** A fresh model where + and − train from step 0 and × enters at step d:
+
+![x learned vs entry step](../images/arith_critical.png)
+
+| × enters at step | 0 | 250 | 500 | 750 | 1000 | 1500 | 2000 | 3000 |
+|---|---|---|---|---|---|---|---|---|
+| runs that learn × (held-out > 0.4) | 7/8 | 4/8 | 5/8 | 4/8 | 3/8 | 3/8 | 1/8 | 0/8 |
+
+- **What decides it is whether + and − are already solved.** × entering before + and − reach 99% held-out is learned in 18 of 31 runs; entering after, in 2 of 25. + and − are solved between steps 700 and 3200, depending on the run.
+- ×, when learned, generalizes late (steps 4600–6650). It does not have to finish while + and − are learning, only start.
+
+**Why: the units × would need are switched off.** After + and − are learned with Adam, the middle layer (h1) uses a few units: on × inputs, 89–91% of its 256 ReLU units output 0 for every pair, and its effective rank is 15–17 (fresh: 0% and 206). A unit that outputs 0 passes back no gradient, so the × loss cannot switch it on. After phase 2, 96–100% are off on × inputs and the model gives up on × (loss ≈ ln 97, a uniform guess).
+
+**What does not fix it** (all on the trained Adam model, × held-out at the end):
+
+| change before phase 2 | runs | × held-out |
+|---|---|---|
+| shrink and perturb, W = λW + σ·W_fresh (λ, σ = 0.5,0.5 / 1,0.5 / 0.8,0.2) | 12 | 0.02–0.06 |
+| reset the embedding, or the output layer, or the 3 hidden layers, or embedding + output | 16 | 0.02–0.04 |
+| weight decay 0.1 or 0.3 instead of 1 | 8 | 0.01–0.03 (train 0.02–0.04) |
+| × at 30% of the batch | 2 | 0.27, 0.44 (train 1.00) |
+| × at 55% of the batch | 2 | 0.07, 0.11 (train 1.00) |
+
+Resetting the hidden layers fails too: + and − come back within a few hundred steps from the embedding and output layer, and the door closes again before × starts.
+
+**What changes it: the activation and the optimizer.** Phase 1 and phase 2 redone with each (2 seeds × 2 batch orders):
+
+| | trained on + and − first: × held-out (train) | fresh: × held-out |
+|---|---|---|
+| Adam, ReLU | 0.02–0.03 (0.02–0.04) | 0.43–0.91 |
+| Adam, GELU | 0.03–0.05 (0.04–0.07) | 0.46–0.99 |
+| Adam, leaky ReLU (slope 0.1) | 0.13–0.29 (0.83–1.00) | 0.42–0.64 |
+| **Muon**, ReLU, 3000 steps | 0.06–0.24 (0.68–0.91) | 0.07–0.27 |
+| **Muon**, ReLU, 6000 steps | **0.11–0.41** | **0.09–0.46** |
+
+- **Leaky ReLU** keeps a gradient through off units: the trained model memorizes × but still generalizes less than fresh.
+- **Muon has no gap.** After + and − with Muon, h1 has 0% units off on × inputs and effective rank 190–193 (Adam: 89–91% off, rank 15–17). Learning × afterwards goes like learning it on a fresh model. Muon's update has equal size in every direction, so directions the + and − loss does not need are still moved every step, and units do not go silent. (In this setup Muon does not fully learn a 12% op in 6000 steps even from fresh; the point is that the trained and fresh models match.)
+
+**What is known.** "Loss of plasticity" (Dohare et al., Nature 2024) and "critical learning periods" (Achille et al., 2019) describe networks that lose the ability to learn new things, with dead units and falling rank. New here: in this tiny model it happens after one round of training, it closes exactly when the old ops are solved, shrink-and-perturb does not fix it, and Muon avoids it while Adam does not.
+
+**Limits.** One tiny model, one op order, 2 starting seeds. Muon runs used 3000-step phase 1 and its own learning rates, so Muon vs Adam differs in more than the optimizer.

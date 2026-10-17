@@ -31,6 +31,9 @@ SYMS = "+-*/in"
 NTOK = N + (6 if os.environ.get("EXTRA") == "1" else 4)   # EXTRA=1: room for the i and n tokens (older saved models have N + 4)
 
 
+ACT = {"relu": F.relu, "gelu": F.gelu, "leaky": lambda h: F.leaky_relu(h, 0.1)}[os.environ.get("ACT", "relu")]   # hidden activation
+
+
 class Net(nn.Module):
     def __init__(s):
         super().__init__()
@@ -41,9 +44,9 @@ class Net(nn.Module):
         s.out = nn.Linear(256, N)
 
     def forward(s, x):
-        h = F.relu(s.inp(s.emb(x).flatten(1)))
-        h = F.relu(s.h1(h))
-        h = F.relu(s.h2(h))
+        h = ACT(s.inp(s.emb(x).flatten(1)))
+        h = ACT(s.h1(h))
+        h = ACT(s.h2(h))
         return s.out(h)
 
 
