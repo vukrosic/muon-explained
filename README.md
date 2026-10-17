@@ -54,6 +54,22 @@ In real networks this imbalance is far worse. Muon's author reports that updates
 
 A plain update spends almost its whole step on the few big directions. The small directions barely move, step after step. Muon's author guesses that some of these small directions carry rare signals that still matter for learning. Setting every strength to 1 gives them the same share of the step as the big ones. This is his explanation of why training gets faster, not a proof. The proof he offers is the speed records.
 
+Here is that difference, step by step. Take two updates of the same total size, 1. The plain one has strengths 1.00 and 0.05. Muon's has 0.71 and 0.71.
+
+![The two updates: a thin ellipse (blue 1.00, red 0.05) and a circle (0.71, 0.71), both of total size 1](images/move0.png)
+
+Apply each update 4 times and track how far the weights have moved along each direction.
+
+![Step 1: each update moves the weights once](images/move1.png)
+
+![Step 2: red has moved 0.10 with the plain update, 1.41 with Muon's](images/move2.png)
+
+![Step 3: red has moved 0.15 with the plain update, 2.12 with Muon's](images/move3.png)
+
+![Step 4: red has moved 14 times further with Muon's update](images/move4.png)
+
+After 4 steps the plain update has moved red by 0.20. Muon's has moved it by 2.83, 14 times further. Blue pays for it: 2.83 instead of 4.00.
+
 ### Why it took until 2024
 
 The idea of setting every strength to 1 is older than Muon:
@@ -72,14 +88,24 @@ Three things changed with Muon:
 
 ### What Muon wants
 
-Every matrix can be written as three moves: a turn, a stretch, and another turn.
+Every matrix can be written as three moves: a turn, a stretch, and another turn. Here they are one at a time, on an example matrix that turns by −50°, stretches by 1.00 and 0.30, and turns by +30°.
+
+![Move 1: the first turn brings the two chosen arrows onto the axes; the circle stays a circle](images/tst1.png)
+
+![Move 2: the stretch makes the circle an ellipse with half-widths 1.00 and 0.30](images/tst2.png)
+
+![Move 3: the second turn points the ellipse in its final direction](images/tst3.png)
+
+In symbols:
 
 ```
 G     =  U · S · Vᵀ          Vᵀ turns, S stretches by the strengths, U turns
 goal  =  U · Vᵀ              the same two turns, with the stretch removed
 ```
 
-Our G is built exactly this way: a stretch by 1.00 and 0.20, then a 30° turn. Removing the stretch means setting every strength to 1. In the picture, the ellipse becomes a circle again, and the arrows keep their directions.
+Our G is built exactly this way: a stretch by 1.00 and 0.20, then a 30° turn. Its first turn is 0°, which is why the example above uses a different matrix. Removing the stretch means setting every strength to 1. In the picture, the ellipse becomes a circle again, and the arrows keep their directions.
+
+![G turns, stretches and turns; the goal U·Vᵀ does the same two turns with no stretch](images/tst4.png)
 
 ### Why not compute U, S and V directly
 
@@ -131,6 +157,8 @@ f(s) = 3.4445·s − 4.775·s³ + 2.0315·s⁵
 
 Why? Write X with its arrows and strengths as X = U·S·Vᵀ, where S holds the strengths. Then XXᵀ = U·S²·Uᵀ, so (XXᵀ)X = U·S³·Vᵀ. Multiplying by XXᵀ cubes every strength and leaves the arrows alone. Doing it twice gives the fifth power. So the whole formula gives U·f(S)·Vᵀ: the same arrows, with each strength replaced by f(strength).
 
+![X, then X·Xᵀ with every strength squared, then X·Xᵀ·X with every strength cubed; the arrows stay put](images/cube.png)
+
 You never compute the arrows or the strengths. The formula only uses matrix multiplications, which GPUs are fast at. The strengths change anyway.
 
 ![One round: read each strength off the curve. 0.196 becomes 0.640, 0.981 becomes 0.717](images/step2.png)
@@ -146,9 +174,19 @@ The weak strength more than triples. Near 0 the curve's slope is 3.4445, so smal
 
 ## 4. Repeat 5 times
 
-Each round's output is the next round's input. On the plot, go up to the curve (one round), then across to the dotted line (feed the result back in), then up again.
+Each round's output is the next round's input. On the plot, go up to the curve (one round), then across to the dotted line (feed the result back in), then up again. One round per image:
 
-![Five rounds as a zig-zag path on the curve, plus a table of strengths per round](images/step3.png)
+![Round 1: red 0.196 → 0.640, blue 0.981 → 0.717](images/round1.png)
+
+![Round 2: both pass 1](images/round2.png)
+
+![Round 3: both fall back below 1](images/round3.png)
+
+![Round 4: still bouncing around 1](images/round4.png)
+
+![Round 5: red 0.722, blue 0.797](images/round5.png)
+
+The same numbers as a table:
 
 | round | strong | weak |
 |---|---|---|
@@ -231,6 +269,8 @@ python3 teach_size.py     # images/step0_size.png
 python3 teach_why_size.py  # images/step0_why.png
 python3 teach.py          # images/step1.png … step4.png
 python3 teach_directions.py  # images/step1b_directions.png
+python3 teach_steps.py    # images/move0.png … move4.png
+python3 teach_series.py   # images/tst1.png … tst4.png, cube.png, round1.png … round5.png
 python3 plot_poly.py      # images/poly_plot.png
 python3 intro_plots.py    # images/muon_timeline.png, muon_numbers.png
 ```
