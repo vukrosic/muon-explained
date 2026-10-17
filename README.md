@@ -54,6 +54,12 @@ In real networks this imbalance is far worse. Muon's author reports that updates
 
 A plain update spends almost its whole step on the few big directions. The small directions barely move, step after step. Muon's author guesses that some of these small directions carry rare signals that still matter for learning. Setting every strength to 1 gives them the same share of the step as the big ones. This is his explanation of why training gets faster, not a proof. The proof he offers is the speed records.
 
+**What is a direction, in a network?** A weight matrix reads a list of numbers that describes one token, for example 768 numbers, and writes a new list. A direction is one pattern across those numbers. Roughly, a pattern stands for something the network has noticed about the token, such as "this word is a verb", "we are inside a quote" or "this is a chemistry term". The update's arrows say which patterns the layer should react to more, and what it should write in response. The strengths say how much.
+
+**Why some strengths are small.** The gradient is added up over every token in the batch. A pattern that shows up in almost every token, such as basic grammar, adds up to a big strength. A pattern that shows up in a handful of tokens, such as a rare word or one specific fact, adds up to a small one. So a plain update mostly learns what is common, and learns rare things slowly. Muon gives the rare patterns the same step size as the common ones.
+
+This is about what knowledge gets stored in the weights, and how fast. It does not change how tokens are generated: generation just uses whatever weights training produced. Real directions are rarely as clean as "verb" or "chemistry"; one direction usually mixes several meanings. The labels are a way to picture it, not a measurement.
+
 Here is that difference, step by step. Take two updates of the same total size, 1. The plain one has strengths 1.00 and 0.05. Muon's has 0.71 and 0.71.
 
 ![The two updates: a thin ellipse (blue 1.00, red 0.05) and a circle (0.71, 0.71), both of total size 1](images/move0.png)
