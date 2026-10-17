@@ -31,6 +31,7 @@ WD, ADAM_BETAS = 0.05, (0.9, 0.999)                         # Muon weight decay 
 DECAY = 0.85                                             # share of steps at the end over which lr falls to 0
 ABC = (3.4445, -4.775, 2.0315)
 COEFS = None                                             # optional list of (a, b, c), one per round
+ROW_BETA = 0                                             # > 0: per-neuron normalization (NorMuon), running average of each row's size
 SPEC = 0                                                 # 0: divide by total size; k > 0: by the largest strength, k power steps
 SAFE = 1.05                                              # with SPEC, divide by SAFE x the estimate (an underestimate would blow up)
 
@@ -56,6 +57,7 @@ def optimize(m, g):
     adam = torch.optim.AdamW([m.emb.weight, m.out.weight, m.out.bias], lr=ADAM_LR, betas=ADAM_BETAS, weight_decay=0)
     mom = [torch.zeros_like(p) for p in muon_ps]
     vecs = [torch.ones(p.shape[1]) / p.shape[1] ** 0.5 for p in muon_ps]
+    rows = [torch.zeros(p.shape[0], 1) for p in muon_ps]
     for step in range(STEPS):
         sched = min(1.0, (1 - step / STEPS) / DECAY)     # flat, then linear decay over the last DECAY of steps
         x, y = batch(train, g)
@@ -65,10 +67,16 @@ def optimize(m, g):
             gr["lr"] = ADAM_LR * sched
         adam.step()
         with torch.no_grad():
-            for p, buf, v in zip(muon_ps, mom, vecs):
+            for p, buf, v, r in zip(muon_ps, mom, vecs, rows):
                 buf.mul_(BETA).add_(p.grad)
                 p.mul_(1 - WD * MUON_LR * sched)
-                p.add_(flatten(p.grad + BETA * buf, v), alpha=-MUON_LR * sched)   # Nesterov momentum
+                O = flatten(p.grad + BETA * buf, v)                            # Nesterov momentum
+                if ROW_BETA:                                                    # each neuron (row) divided by its running size
+                    r.mul_(ROW_BETA).add_(O.pow(2).mean(1, keepdim=True), alpha=1 - ROW_BETA)
+                    size = O.norm()
+                    O = O / (r / (1 - ROW_BETA ** (step + 1))).sqrt().add(1e-8)
+                    O = O * (size / (O.norm() + 1e-12))                         # same total size as before
+                p.add_(O, alpha=-MUON_LR * sched)
 # --------------------------------------------------------------------- end of OPTIMIZER ----
 
 

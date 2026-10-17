@@ -39,6 +39,8 @@ The seed 1 check (not part of the score) shows the gain is not luck on seed 0: 0
 
 **Tried and worse** (all in runs.jsonl):
 
+- Per-neuron normalization after Newton–Schulz (NorMuon style, each row divided by its running size, total update size kept): predicted 1.62, got 1.6322 (row average 0.99) and 1.6361 (0.95); Muon lr 0.014 or 0.03 did not fix it. With only 2 rounds, rows may already be balanced enough.
+
 - More rounds with everything else tuned: 3 rounds 1.6883, 5 rounds 1.6684, against 1.6540 for 2 rounds with the same settings. Exact orthogonalization is not what this model needs.
 - 1 round with Polar Express's first coefficients: 1.6411 vs 1.6409 for 2 rounds at the same settings, at a third less compute. A tie.
 - Weight decay 0.2 (1.6805) or more; AdamW lr 0.05 (1.6354); AdamW beta2 0.99 or 0.95; beta1 0.8; momentum 0.9 or 0.97; cubic rounds; dividing by the largest strength instead of the total size.
