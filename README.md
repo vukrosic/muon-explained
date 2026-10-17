@@ -239,9 +239,38 @@ With only these two numbers there is a trade-off. Both curves below send 1 to a 
 
 Once inside the band, a strength bounces between about 0.68 and 1.20 and stays there. After 5 rounds, every strength above 0.0016 ends between 0.68 and 1.20. That is "close to 1" in Muon's sense: not exactly 1, but within a factor of about 1.7 of each other, where X started with red and blue 5 times apart.
 
+**Every round, one picture each.** Each round uses the same step 5 curve. Only the input changes: round 1 takes the strengths X starts with, and every later round takes what came out of the round before. In each picture below:
+
+- **Left:** the round itself. Each dot starts on the bottom axis at the strength going into this round, goes up to the curve, and the strength after the round is read on the left side.
+- **Right:** the whole curve so far. Every starting strength (bottom axis) is shown where it sits after this many rounds. The dashed line is the round before. The pink strip covers the starting strengths that are still below 0.68.
+
+![Round 1: the step 5 curve itself; strengths under 0.21 are still far from 1](images/rounds1.png)
+
+*Figure 21. Round 1: the step 5 curve itself; strengths under 0.21 are still far from 1.*
+
+![Round 2: 0.1 reaches 0.99; only strengths under 0.061 are still low](images/rounds2.png)
+
+*Figure 22. Round 2: 0.1 reaches 0.99; only strengths under 0.061 are still low.*
+
+![Round 3: only strengths that started under 0.018 are still low](images/rounds3.png)
+
+*Figure 23. Round 3: only strengths that started under 0.018 are still low.*
+
+![Round 4: only strengths that started under 0.0052 are still low](images/rounds4.png)
+
+*Figure 24. Round 4: only strengths that started under 0.0052 are still low.*
+
+![Round 5: every strength above 0.0016 is between 0.68 and 1.20](images/rounds5.png)
+
+*Figure 25. Round 5: every strength above 0.0016 is between 0.68 and 1.20.*
+
+The right panel gets wavier every round because each round folds the curve once more: strengths past the top at 0.555 come back down, then go up again in the next round. The waves stay between 0.68 and 1.20, so they do no harm: Muon needs every strength near 1, not a smooth curve.
+
+Summary of all 5 rounds:
+
 ![After 5 rounds: the curve applied 5 times stays in the band; four strengths round by round](images/idea6.png)
 
-*Figure 21. After 5 rounds: the curve applied 5 times stays in the band; four strengths round by round.*
+*Figure 26. After 5 rounds: the curve applied 5 times stays in the band; four strengths round by round.*
 
 [Section 4](#4-repeat-5-times) shows the same 5 rounds on our matrix, one picture per round.
 
@@ -262,7 +291,7 @@ X is three moves: turn, stretch, turn. (Matrices act from right to left, so in U
 
 ![X, X·X and X·Xᵀ·X: X·X leaves the dashed lines of X's arrows, X·Xᵀ·X stays on them](images/xx_fail.png)
 
-*Figure 22. X, X·X and X·Xᵀ·X: X·X leaves the dashed lines of X's arrows, X·Xᵀ·X stays on them.*
+*Figure 27. X, X·X and X·Xᵀ·X: X·X leaves the dashed lines of X's arrows, X·Xᵀ·X stays on them.*
 
 ### The fix: Xᵀ, which runs X's turns backwards
 
@@ -291,7 +320,7 @@ Here are the 9 moves one at a time, with our strengths 0.981 and 0.196. Our G ha
 
 ![X·Xᵀ·X as 9 moves on a circle: moves 4 and 7 undo the turn before them; three stretches remain](images/chain.png)
 
-*Figure 23. X·Xᵀ·X as 9 moves on a circle: moves 4 and 7 undo the turn before them; three stretches remain.*
+*Figure 28. X·Xᵀ·X as 9 moves on a circle: moves 4 and 7 undo the turn before them; three stretches remain.*
 
 In symbols:
 
@@ -307,7 +336,7 @@ The formula at the top writes the same product as (XXᵀ)X. Here it is as three 
 
 ![X, then X·Xᵀ with every strength squared, then X·Xᵀ·X with every strength cubed; the arrows stay put](images/cube.png)
 
-*Figure 24. X, then X·Xᵀ with every strength squared, then X·Xᵀ·X with every strength cubed; the arrows stay put.*
+*Figure 29. X, then X·Xᵀ with every strength squared, then X·Xᵀ·X with every strength cubed; the arrows stay put.*
 
 ### Two more moves give the fifth power
 
@@ -352,15 +381,15 @@ Each term has its own job. Here the curve is built one term at a time.
 
 ![Term 1: 3.4445·s lifts red to 0.675 but sends blue to 3.379](images/curve1.png)
 
-*Figure 25. Term 1: 3.4445·s lifts red to 0.675 but sends blue to 3.379.*
+*Figure 30. Term 1: 3.4445·s lifts red to 0.675 but sends blue to 3.379.*
 
 ![Term 2: −4.775·s³ barely touches red but pulls blue down to −1.129](images/curve2.png)
 
-*Figure 26. Term 2: −4.775·s³ barely touches red but pulls blue down to −1.129.*
+*Figure 31. Term 2: −4.775·s³ barely touches red but pulls blue down to −1.129.*
 
 ![Term 3: +2.0315·s⁵ leaves red at 0.640 and lifts blue back to 0.717](images/curve3.png)
 
-*Figure 27. Term 3: +2.0315·s⁵ leaves red at 0.640 and lifts blue back to 0.717.*
+*Figure 32. Term 3: +2.0315·s⁵ leaves red at 0.640 and lifts blue back to 0.717.*
 
 - **3.4445** sets how fast small strengths grow. For small s, s³ and s⁵ are almost 0, so only this term counts.
 - **−4.775** pulls big strengths down. s³ is tiny for small s but close to s near 1.
@@ -385,7 +414,7 @@ The s⁵ term grows fastest. Above about 1.2 it wins, and the curve shoots up. I
 
 ![Dividing G by its size, and why: the curve explodes for inputs above about 1.2](images/step0_size.png)
 
-*Figure 28. Dividing G by its size, and why: the curve explodes for inputs above about 1.2.*
+*Figure 33. Dividing G by its size, and why: the curve explodes for inputs above about 1.2.*
 
 ### Why divide by the size
 
@@ -415,7 +444,7 @@ For our G: 1.00² + 0.20² = 1.040, the same total as the 4 entries. The reason 
 
 ![Size² equals the sum of squared strengths; the biggest strength after dividing; the 768 case lifted in 3 rounds](images/step0_why.png)
 
-*Figure 29. Size² equals the sum of squared strengths; the biggest strength after dividing; the 768 case lifted in 3 rounds.*
+*Figure 34. Size² equals the sum of squared strengths; the biggest strength after dividing; the 768 case lifted in 3 rounds.*
 
 ### The price
 
@@ -433,7 +462,7 @@ You never compute the arrows or the strengths. The formula only uses matrix mult
 
 ![One round: read each strength off the curve. 0.196 becomes 0.640, 0.981 becomes 0.717](images/step2.png)
 
-*Figure 30. One round: read each strength off the curve. 0.196 becomes 0.640, 0.981 becomes 0.717.*
+*Figure 35. One round: read each strength off the curve. 0.196 becomes 0.640, 0.981 becomes 0.717.*
 
 For our matrix:
 
@@ -450,23 +479,23 @@ Each round's output is the next round's input. On the plot, go up to the curve (
 
 ![Round 1: red 0.196 → 0.640, blue 0.981 → 0.717](images/round1.png)
 
-*Figure 31. Round 1: red 0.196 → 0.640, blue 0.981 → 0.717.*
+*Figure 36. Round 1: red 0.196 → 0.640, blue 0.981 → 0.717.*
 
 ![Round 2: both pass 1](images/round2.png)
 
-*Figure 32. Round 2: both pass 1.*
+*Figure 37. Round 2: both pass 1.*
 
 ![Round 3: both fall back below 1](images/round3.png)
 
-*Figure 33. Round 3: both fall back below 1.*
+*Figure 38. Round 3: both fall back below 1.*
 
 ![Round 4: still bouncing around 1](images/round4.png)
 
-*Figure 34. Round 4: still bouncing around 1.*
+*Figure 39. Round 4: still bouncing around 1.*
 
 ![Round 5: red 0.722, blue 0.797](images/round5.png)
 
-*Figure 35. Round 5: red 0.722, blue 0.797.*
+*Figure 40. Round 5: red 0.722, blue 0.797.*
 
 The same numbers as a table:
 
@@ -485,7 +514,7 @@ Here is the same matrix after each round:
 
 ![The ellipse after each round becomes almost a circle](images/step4.png)
 
-*Figure 36. The ellipse after each round becomes almost a circle.*
+*Figure 41. The ellipse after each round becomes almost a circle.*
 
 The arrows never turn. The thin ellipse becomes a rounder shape after one round and stays round.
 
@@ -499,7 +528,7 @@ X  ←  1.5·X  −  0.5·(XXᵀ)X        curve: f(s) = 1.5·s − 0.5·s³
 
 ![Quintic vs cubic after 1 round and after 5 rounds](images/poly_plot.png)
 
-*Figure 37. Quintic vs cubic after 1 round and after 5 rounds.*
+*Figure 42. Quintic vs cubic after 1 round and after 5 rounds.*
 
 | | quintic | cubic |
 |---|---|---|
@@ -557,7 +586,7 @@ python3 teach.py          # images/step1.png … step4.png
 python3 teach_directions.py  # images/step1b_directions.png
 python3 teach_steps.py    # images/move0.png … move4.png
 python3 teach_series.py   # images/tst1.png … tst4.png, cube.png, round1.png … round5.png
-python3 teach_ladder.py   # images/idea1.png … idea6.png, idea3a.png, idea3b.png, chain.png, xx_fail.png, curve1.png … curve3.png
+python3 teach_ladder.py   # images/idea1.png … idea6.png, idea3a.png, idea3b.png, rounds1.png … rounds5.png, chain.png, xx_fail.png, curve1.png … curve3.png
 python3 plot_poly.py      # images/poly_plot.png
 python3 intro_plots.py    # images/muon_timeline.png, muon_numbers.png
 ```

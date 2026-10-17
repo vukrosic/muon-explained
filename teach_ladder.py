@@ -1,6 +1,7 @@
 """Section 2 ladder: why X·Xᵀ·X cubes the strengths, and how the curve's three numbers are built up.
 
 images/idea1.png … idea6.png, idea3a.png, idea3b.png  why s alone fails, why s³ and s⁵ are added, 5 rounds
+images/rounds1.png … rounds5.png  the whole curve after each of the 5 rounds
 images/chain.png            the 9 moves of X·Xᵀ·X on a circle; the middle turns undo each other
 images/curve1.png … curve3.png  the curve f(s) built one term at a time
 images/xx_fail.png          X, X·X and X·Xᵀ·X side by side: only X·Xᵀ·X keeps X's arrows
@@ -278,6 +279,60 @@ ax.set_title("Four strengths, round by round. Small ones grow about ×3.4 per ro
              "until they reach the band, then bounce inside it.", fontsize=13)
 fig.suptitle("Step 5 is one round. Muon runs it 5 times.", fontsize=16, fontweight="bold")
 fig.tight_layout(); fig.savefig("images/idea6.png"); plt.close(fig)
+
+# step 5c: the whole curve after each round, one image per round
+GREEN = "#2e8b57"
+PTS = [(0.1, GREEN, "0.1"), (RED, WEAK, "red 0.196"), (BLUE, BIG, "blue 0.981")]
+for k in range(1, 6):
+    fig, axs = plt.subplots(1, 2, figsize=(17, 7.2), dpi=130, gridspec_kw={"width_ratios": [1, 1.15]})
+    # right: this round = the step 5 curve, fed with the strengths from the round before
+    ax = axs[0]
+    ax.axhspan(0.7, 1.2, color="#e6f0e6", zorder=0); ax.axhline(1, ls="--", color=MUTE, lw=1)
+    big = np.linspace(0, 1.25, 400)
+    ax.plot(big, quint(big), color=INK, lw=3, label="the step 5 curve (the same every round)")
+    ax.plot(big, big, ":", color=MUTE, lw=1.5, label="out = in")
+    for i, (x0, col, nm) in enumerate(PTS):
+        v = [x0]
+        for _ in range(k):
+            v.append(quint(v[-1]))
+        a, b = v[k - 1], v[k]
+        ax.plot([a, a], [0, b], color=col, lw=2, ls="--")
+        ax.plot(a, 0, "o", color=col, ms=9, clip_on=False, zorder=6)
+        ax.plot(a, b, "o", color=col, ms=11, zorder=6)
+        ax.text(0.03, 1.40 - 0.09 * i, f"{nm.split()[0]}: {a:.3f} → {b:.3f}", color=col, fontweight="bold",
+                fontsize=14, va="top")
+    ax.set_xlim(0, 1.25); ax.set_ylim(0, 1.45)
+    ax.set_xlabel(f"strength going into round {k}"); ax.set_ylabel(f"strength after round {k}")
+    ax.legend(loc="lower right", fontsize=11)
+    ax.set_title(f"Round {k} uses the same curve as step 5. What goes in is\n"
+                 + ("the strength X starts with." if k == 1 else f"what came out of round {k - 1}."), fontsize=13)
+    # left: start strength → strength after k rounds, for every start strength
+    ax = axs[1]
+    ax.axhspan(0.7, 1.2, color="#e6f0e6", zorder=0); ax.axhline(1, ls="--", color=MUTE, lw=1)
+    if k > 1:
+        ax.plot(fine, after[k - 1], color=MUTE, lw=1.6, ls="--", label=f"after {k - 1} round" + ("s" if k > 2 else ""))
+    ax.plot(fine, after[k], color=INK, lw=2.2, label=f"after {k} round" + ("s" if k > 1 else ""))
+    for x0, col, nm in PTS:
+        y = x0
+        for _ in range(k):
+            y = quint(y)
+        ax.plot(x0, y, "o", color=col, ms=11, zorder=6)
+    low = fine[np.argmax(after[k] >= 0.68)]
+    ax.axvspan(0, low, color="#f3e3dc", zorder=0)
+    ax.text(low + 0.01, 0.05, f"left of {low:.3g}: still below 0.68", fontsize=12, color=WEAK, va="bottom")
+    ax.set_xlim(0, 1.0); ax.set_ylim(0, 1.45)
+    ax.set_xlabel("s = strength X starts with, before round 1"); ax.set_ylabel(f"strength after round {k}")
+    ax.legend(loc="lower right", fontsize=12)
+    ax.set_title(f"The whole picture after {k} round" + ("s" if k > 1 else "") + ": for every starting strength,\n"
+                 f"where it is now. Dots = the three strengths on the left.", fontsize=13)
+    note = {1: "This is exactly the step 5 curve. Strengths under 0.21 are still far from 1.",
+            2: "The low end rises: 0.1 is now at 0.99. Only strengths under 0.061 are still low.",
+            3: "Only strengths that started under 0.018 are still low.",
+            4: "Only strengths that started under 0.0052 are still low. Everything else bounces around 1.",
+            5: "Done. Every strength above 0.0016 is between 0.68 and 1.20."}[k]
+    fig.suptitle(f"Round {k} of 5. {note}", fontsize=16, fontweight="bold")
+    fig.tight_layout(); fig.savefig(f"images/rounds{k}.png"); plt.close(fig)
+    print(k, "still below 0.68 left of", low, "min right of it", after[k][fine >= low].min())
 
 # ---------- the curve, one term at a time ----------
 a_, b_, c_ = 3.4445, -4.775, 2.0315
