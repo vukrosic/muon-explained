@@ -614,23 +614,36 @@ Real Muon runs the same loop in bfloat16 on the GPU.
 
 ## 7. Experiment: does every direction need an equal push?
 
-Muon's ideal is the same push for every direction (all strengths = 1). We tested whether that matters, on a tiny language model that trains in one minute on a laptop.
+**Question.** Muon's ideal pushes every direction of an update by the same amount (all strengths = 1). Does pushing the weak directions less make a network learn worse?
 
-**Setup.** Split each update exactly with an SVD, then raise every strength to a power p: s becomes s^p. Then scale the whole update so its total size is the same for every p. p = 0 pushes every direction equally, Muon's ideal. p = 1 keeps the update's own shape, so weak directions are barely pushed. Only p changes; every run has the same starting weights and batches, and each p gets its own best learning rate.
+**What we did.**
+
+- Trained a tiny language model (three 512-wide layers, 1000 steps, about 1 minute on a laptop) on public text: Python's own source code.
+- Split each Muon update exactly with an SVD and raised every strength to a power p, then scaled the update back to the same total size. p = 0 pushes every direction equally. p = 1 keeps the update's own shape, so weak directions are barely pushed.
+- Ran p = 0, 0.25, 0.5 and 1. Only p changed: same starting weights, batches and validation text.
+- Gave each p its best of 5 learning rates, so no p wins just by taking a better step size, then reran the best of each with a second seed to measure noise.
+- Wrote down a prediction before running: flat for small p, much worse at p = 1.
 
 ![Validation loss vs p: p = 0, 0.25 and 0.5 tie within seed noise; p = 1 is worse at every learning rate](images/exp2_power.png)
 
 *Figure 43. Validation loss vs p: p = 0, 0.25 and 0.5 tie within seed noise; p = 1 is worse at every learning rate.*
 
-**Results.** At each p's best learning rate, averaged over 2 seeds: p = 0 reaches 1.652, p = 0.25 reaches 1.646, p = 0.5 reaches 1.645, p = 1 reaches 1.695.
+**Results** (each p at its best learning rate, mean of 2 seeds, lower is better):
 
-**Analysis.**
+| p | weak directions are | validation loss |
+|---|---|---|
+| 0 | pushed equally (Muon's ideal) | 1.652 |
+| 0.25 | pushed a little less | 1.646 |
+| 0.5 | pushed less | 1.645 |
+| 1 | barely pushed | 1.695 |
+
+**What it means.**
 
 - **Starving the weak directions costs learning.** p = 1 is the worst at every learning rate and on both seeds.
-- **Pushing them somewhat less costs nothing measurable.** p = 0, 0.25 and 0.5 are within 0.008 of each other, while changing only the seed moves a result by 0.03.
+- **Pushing them somewhat less costs nothing measurable.** p = 0, 0.25 and 0.5 are within 0.008 of each other; changing only the seed moves a result by 0.03.
 - **So Muon's band of 0.68 to 1.20 is enough.** It is far more even than p = 0.5, which already tied with exact equality. Reaching exactly 1 would cost more rounds and, at this size, buy nothing.
 
-Full setup, every run, limits and code: [experiments/README.md](experiments/README.md).
+Every run, the full setup, limits and how to rerun it: [experiments/exp2-equal-push.md](experiments/exp2-equal-push.md).
 
 ## Run it
 
@@ -646,7 +659,7 @@ python3 teach_series.py   # images/tst1.png … tst4.png, cube.png, round1.png �
 python3 teach_ladder.py   # images/idea1.png … idea6.png, idea3a.png, idea3b.png, rounds1.png … rounds5.png, chain.png, xx_fail.png, curve1.png … curve3.png
 python3 plot_poly.py      # images/poly_plot.png
 python3 intro_plots.py    # images/muon_timeline.png, muon_numbers.png
-cd experiments && python3 exp2_power.py 0.01 && python3 plot_exp2.py   # section 7, see experiments/README.md
+cd experiments && python3 exp2_power.py 0.01 && python3 plot_exp2.py   # section 7, see experiments/exp2-equal-push.md
 ```
 
 ## Sources
