@@ -116,7 +116,7 @@ def panel5_linear(a):                             # chart 5 on linear axes, on M
     a.axhspan(0.68, 1.20, color="#d62728", alpha=.15, label="real Muon (5 rounds): 0.68 to 1.20")
     a.axhline(1, color="#d62728", ls="--", lw=2, label="Muon's target: every value = 1")
     a.set(xlabel="singular value number (1 = largest)", ylabel="singular value (same total size as Muon's output)",
-          title="5. Singular values of one real update", ylim=(0, None), xlim=(0, n + 1))
+          title="3. Singular values of one real update", ylim=(0, None), xlim=(0, n + 1))
     a.legend()
 
 
