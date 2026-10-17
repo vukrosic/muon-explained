@@ -52,11 +52,24 @@ In real networks this imbalance is far worse. Muon's author reports that updates
 
 ### Why this helps
 
-A plain update spends almost its whole step on the few big directions. The small directions barely move, step after step. Muon's author guesses that some of these small directions carry rare signals that still matter for learning. Setting every strength to 1 gives them the same share of the step as the big ones. This is his explanation of why training gets faster, not a proof. The proof he offers is the speed records.
+A plain update spends almost its whole step on the few big directions. The small directions barely move, step after step. Muon's author guesses that some of these small directions carry rare signals that still matter for learning. Setting every strength to 1 gives them the same share of the step as the big ones. This is his guess at why training gets faster. Nobody has shown that it is the reason. What the speed records show is only that training does get faster.
 
 **What is a direction, in a network?** A weight matrix reads a list of numbers that describes one token, for example 768 numbers, and writes a new list. A direction is one pattern across those numbers. Roughly, a pattern stands for something the network has noticed about the token, such as "this word is a verb", "we are inside a quote" or "this is a chemistry term". The update's arrows say which patterns the layer should react to more, and what it should write in response. The strengths say how much.
 
-**Why some strengths are small.** The gradient is added up over every token in the batch. A pattern that shows up in almost every token, such as basic grammar, adds up to a big strength. A pattern that shows up in a handful of tokens, such as a rare word or one specific fact, adds up to a small one. So a plain update mostly learns what is common, and learns rare things slowly. Muon gives the rare patterns the same step size as the common ones.
+**Why some strengths are small.** The gradient G is a sum. Every token in the batch adds its own small matrix to it, entry by entry. That small matrix is the token's input list times how the layer's output should change for that token. A 2×2 example: say one input pattern is "grammar" and the other is "chemistry".
+
+```
+one grammar token adds      [0.1  0  ]      1,000 grammar tokens add up to   [100  0]
+                            [0    0  ]
+one chemistry token adds    [0    0  ]      10 chemistry tokens add up to    [0    1]
+                            [0    0.1]
+                                                              G  =  [100  0]
+                                                                    [0    1]
+```
+
+G stretches the grammar direction by 100 and the chemistry direction by 1. Every grammar token pushes the same entries the same way, so those numbers pile up. Chemistry has only 10 tokens to pile up. So a strength is big when many tokens push the same pattern, and small when few do. In a real batch the patterns are mixed across many entries, not one entry each, but they add up the same way.
+
+A plain update with this G moves grammar 100 times further than chemistry, so it mostly learns what is common, and learns rare things slowly. Muon sets both strengths to 1, so the rare pattern gets the same step size as the common one.
 
 This is about what knowledge gets stored in the weights, and how fast. It does not change how tokens are generated: generation just uses whatever weights training produced. Real directions are rarely as clean as "verb" or "chemistry"; one direction usually mixes several meanings. The labels are a way to picture it, not a measurement.
 
