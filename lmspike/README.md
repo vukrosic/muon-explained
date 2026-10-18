@@ -24,7 +24,7 @@
 
 ## 2. Dead units here cannot be revived, not even by Muon
 
-Switching an Adam run to Muon at step 25, 50, 100 or 300 leaves 45–52% of layer 2 dead (validation 1.774–1.795). In arithmetic 10 Muon steps revived 99% of units. The difference: the arithmetic units were off only on × inputs and still got a gradient from + and −. Here the dead units are off on every input, so their row of the gradient is exactly zero. Newton–Schulz maps a zero row to a zero row (checked: max 0.0), so Muon cannot move them either. **Muon prevents the deaths; it cannot undo them.**
+Switching an Adam run to Muon at step 25, 50, 100 or 300 leaves 45–52% of layer 2 dead (validation 1.769–1.795). In arithmetic 10 Muon steps revived 99% of units. The difference: the arithmetic units were off only on × inputs and still got a gradient from + and −. Here the dead units are off on every input, so their row of the gradient is exactly zero. Newton–Schulz maps a zero row to a zero row (checked: max 0.0), so Muon cannot move them either. **Muon prevents the deaths; it cannot undo them.**
 
 Switching Muon → Adam at step 25 or 100 without warmup kills 27–68% of units, with loss spikes right after the switch (steps 101, 102): the same cold-restart death as in arithmetic. With a 50-step lr warmup after the switch, only 5–10% die.
 
@@ -80,4 +80,4 @@ With the speedrun's embedding/output lr 0.036:
 
 The Adam-to-Muon gap goes from 0.032 to 0.015: about half of Muon's lead in this model is the start, and an Adam schedule can get it.
 
-**Limits.** One tiny model, 1000 steps, 3 seeds (seed-to-seed spread about 0.01; the per-seed order is the same in every comparison above except Adam lr 0.003 vs 0.005 at warmup 100). Adam's lr and warmup were tuned on a coarse grid only. Why frozen hidden layers lose to tiny steps is not explained yet.
+**Limits.** One tiny model, 1000 steps, 3 seeds (seed-to-seed spread about 0.01-0.02). Every start in section 4 except frozen beats Adam warmup 50 on all 3 seeds; differences under 0.01 between those starts are ties. Adam's lr and warmup were tuned on a coarse grid only. Why frozen hidden layers lose to tiny steps is not explained yet.
