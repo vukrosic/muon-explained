@@ -149,3 +149,27 @@ If 30× Muon's lr for 10 steps hurts and Adam-sized steps hurt, is Muon's own st
 10 steps at 3× is better than plain Muon on 6 of 6 seeds (seeds 3–5 added: 1.6272 / 1.6213 / 1.6282 vs 1.6274 / 1.6316 / 1.6301). 6-seed means: 1.6237 vs 1.6285, a gain of 0.005. Small, but every seed agrees. Longer boosts (25 or 50 steps) lose it.
 
 On the speedrun's ReLU record settings the same boost gives 4 of 5 seeds better, mean 0.0036 (see [speedrun README](../speedrun/README.md#early-muon-lr-boost)).
+
+## 9. The rank-1 first gradient is the model learning character frequencies; put them in the bias and Adam's start stops hurting
+
+At the start the model predicts nearly uniform characters (first loss 4.56). The cheapest improvement is to predict common characters more often, and that one shared push is the same for every example, which is why the first gradient is nearly rank 1. Starting the output bias at the log character frequencies (one line, `OUTBIAS=1` in [lmspike.py](lmspike.py)) gives that for free:
+
+- First loss 4.56 → 3.27. Stable rank of the first hidden gradients 1.0–1.4 → 2.3–2.6. Strength of Adam's first step in its top direction 1.2 → 0.75 (seed 0, ReLU).
+
+GELU, embedding lr 0.01, 3 seeds, data in [lmbias.jsonl](lmbias.jsonl):
+
+| | default init | output bias = log frequencies |
+|---|---|---|
+| Adam (lr 0.003; 0.002 / 0.004 are worse with both inits) | 1.637 | **1.630** |
+| Muon (lr 0.03; 0.02 / 0.04 are worse with both inits) | 1.627 | 1.627 |
+| Adam minus Muon | 0.010 | **0.003** |
+| 10 Adam steps, then Muon | 1.636 | 1.627 |
+| Muon, 3× lr for the first 10 steps | 1.622 | **1.620** |
+| last hidden matrix's stable rank after 10 Adam steps (seed 0) | 10 | 41 |
+
+- **Adam gains 0.007, Muon gains nothing.** Seed by seed, Adam minus Muon is +0.006, +0.003, −0.001: no longer a consistent gap.
+- **10 Adam steps at the start no longer cost anything** (1.627, same as Muon all the way).
+- **The early boost still helps Muon** (better on all 3 seeds), so it is not only undoing the rank-1 start.
+- **With ReLU it is not enough.** Adam still leaves 40% of layer 2 dead and ends at 1.716 (from 1.740), Muon 1.648.
+
+The bias init is not allowed in the speedrun (only the optimizer may change there).
