@@ -508,7 +508,7 @@ Section 23's reset needs to know when a change happens. Two common ways to limit
 - **A small soft-cap destroys Adam over changes.** With cap 3 or 5, tasks 2–12 end above a uniform guess (4.57), and they get worse task after task (cap 5: 4.06 on tasks 7–12). Likely reason, not measured: after a relabeling, the old output layer pushes some wrong logits up to the cap, where tanh is flat and passes almost no gradient, so the model cannot unlearn them. Muon does not collapse with the same cap.
 - **With Muon, cap 5 helps a little.** 0.025 and 0.032 better (seeds 0, 1), and the worst layer-3 deaths drop from 37–39% to 3–11%, but it stays 0.025 behind the reset. Cap 10 changes nothing. Cap 3 costs 0.11 on the first task.
 - **Label smoothing makes later tasks about as good as the first, by making the first one worse.** Muon at 0.1: no rise from task 1 to the later ones (1.806 → 1.810), but task 1 is 0.04 worse than plain. Adam at 0.1 gains 0.03 over plain.
-- None comes within 0.03 of resetting the output layer.
+- None matches resetting the output layer: the closest, Muon with cap 5, is 0.025 behind; for Adam the closest is 0.15 behind.
 
 ## 25. When the reset pays: only once the old output layer is worse than a uniform guess
 
