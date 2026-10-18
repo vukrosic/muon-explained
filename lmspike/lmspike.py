@@ -44,6 +44,11 @@ OUTBIAS = os.environ.get("OUTBIAS") == "1"                # 1: output bias start
 T.BATCH = BATCH = int(os.environ.get("BATCH", 512))      # examples per step (batch() reads train.BATCH)
 T.HID = HID = int(os.environ.get("HID", 512))            # hidden width (Net reads train.HID when it is built)
 MWD = float(os.environ.get("MWD", 0))                       # Muon weight decay, multiplied by lr (as in the speedrun)
+SHIFT = os.environ.get("SHIFT", "")                         # perm: characters relabeled by a fixed random permutation; rev: text reversed
+SHIFT_AT = int(os.environ.get("SHIFT_AT", 0))               # step at which SHIFT happens (0: from the start); > 0: the lr schedule restarts there
+SHIFT_RESET = os.environ.get("SHIFT_RESET") == "1"          # 1: fresh optimizer state for the hidden matrices at SHIFT_AT (Adam moments / Muon momentum)
+SHIFT_SHRINK = float(os.environ.get("SHIFT_SHRINK", 1))     # at SHIFT_AT: hidden matrices *= SHIFT_SHRINK, then + SHIFT_NOISE * fresh init (shrink and perturb)
+SHIFT_NOISE = float(os.environ.get("SHIFT_NOISE", 0))
 CAP = float(os.environ.get("CAP", 0))                       # > 0: diagnostic, after every step clip each hidden matrix's singular values to <= CAP (exact SVD)
 
 counts = torch.bincount(train, minlength=V).float()
@@ -81,8 +86,25 @@ hopt = torch.optim.AdamW(hid, lr=HID_LR, weight_decay=WD, betas=(0.9, B2))
 mom = [torch.zeros_like(p) for p in hid]
 m1 = [torch.zeros_like(p) for p in hid]; sq = [torch.zeros_like(p) for p in hid]   # Adam moments for the adamshape start
 losses, gnorms, dead, wstat = [], [], [], []   # wstat: [step, (Frobenius norm, top singular value) per hidden matrix]
+v_pre = vr_pre = None
 for step in range(STEPS):
-    sched = min(1.0, (1 - step / STEPS) / DECAY) * (min(1.0, (step + 1) / WARM) if WARM else 1.0)
+    if SHIFT and step == SHIFT_AT:
+        if SHIFT_AT: v_pre, vr_pre = full_val(m)
+        if SHIFT == "perm":
+            P = torch.randperm(V, generator=torch.Generator().manual_seed(99))
+            train, val, rare = P[train], P[val], rare[P.argsort()]
+        else:
+            train, val = train.flip(0), val.flip(0)
+        probe = val[probe_ix[:, None] + torch.arange(CTX)]
+        if SHIFT_AT and (SHIFT_SHRINK != 1 or SHIFT_NOISE):
+            torch.manual_seed(500 + SEED); fresh = Net()
+            with torch.no_grad():
+                for p, q in zip(hid, [fresh.inp.weight, fresh.h1.weight, fresh.h2.weight]): p.mul_(SHIFT_SHRINK).add_(q, alpha=SHIFT_NOISE)
+        if SHIFT_RESET and SHIFT_AT:
+            hopt = torch.optim.AdamW(hid, lr=HID_LR, weight_decay=WD, betas=(0.9, B2)); mom = [torch.zeros_like(p) for p in hid]
+    t0, L = (SHIFT_AT, STEPS - SHIFT_AT) if SHIFT and SHIFT_AT and step >= SHIFT_AT else (0, SHIFT_AT if SHIFT and SHIFT_AT else STEPS)
+    t = step - t0
+    sched = min(1.0, (1 - t / L) / DECAY) * (min(1.0, (t + 1) / WARM) if WARM else 1.0)
     if SWITCH and WARM2 and step >= SWITCH:
         sched *= min(1.0, (step - SWITCH + 1) / WARM2)
     if step % 25 == 0 or step < 25:
@@ -101,7 +123,7 @@ for step in range(STEPS):
     if SWITCH and RESET2 and step == SWITCH:
         hopt = torch.optim.AdamW(hid, lr=HID_LR, weight_decay=WD, betas=(0.9, B2))
     if cur == "adam":
-        hs = sched * (min(1.0, (step + 1) / WARM_HID) if WARM_HID else 1.0)
+        hs = sched * (min(1.0, (t + 1) / WARM_HID) if WARM_HID else 1.0)
         for gr in hopt.param_groups: gr["lr"] = LR1 if (LR1 and SWITCH and step < SWITCH) else HID_LR * hs * em
         hopt.step()
     elif cur != "frozen":                     # frozen: hidden matrices not updated at all
@@ -129,8 +151,8 @@ with torch.no_grad():
     dead.append([STEPS] + [round(float(((z > 0).sum(0) == 0).float().mean()), 4) for z in hidden(m, probe)])
 # spike: loss more than 1.0 above the median of the previous 50 steps
 spikes = [i for i in range(50, STEPS) if losses[i] > sorted(losses[i - 50:i])[25] + 1.0]
-print(f"{ACT} {f'batch {BATCH} ' if BATCH != 512 else ''}{f'hid {HID} ' if HID != 512 else ''}{f'mwd {MWD:g} ' if MWD else ''}{f'wd {WD:g} ' if WD else ''}{f'steps {STEPS} ' if STEPS != 1000 else ''}{'outbias ' if OUTBIAS else ''}{f'cap {CAP:g} ' if CAP else ''}{f'early {EARLY_N}x{EARLY_MULT:g} ' if EARLY_N else ''}{f'warm_hid {WARM_HID} ' if WARM_HID else ''}{'reset ' if RESET2 else ''}{f'lr1 {LR1:g} ' if LR1 else ''}{OPT}{f'(lr {MUON_LR:g})->{OPT2}@{SWITCH}' if SWITCH else ''} warm {WARM} emb {EMB_LR:g} lr {HID_LR:g} clip {CLIP:g} b2 {B2:g} seed {SEED}{f' data {DSEED}' if DSEED != SEED else ''}: val {v:.4f} rare {vr:.4f}  spikes {len(spikes)} {spikes[:6]}"
+print(f"{ACT} {f'{SHIFT}@{SHIFT_AT}{" reset" if SHIFT_RESET else ""}{f" shrink {SHIFT_SHRINK:g}+{SHIFT_NOISE:g}" if SHIFT_SHRINK != 1 or SHIFT_NOISE else ""} (before {v_pre:.4f}) ' if SHIFT and SHIFT_AT else f'{SHIFT} ' if SHIFT else ''}{f'batch {BATCH} ' if BATCH != 512 else ''}{f'hid {HID} ' if HID != 512 else ''}{f'mwd {MWD:g} ' if MWD else ''}{f'wd {WD:g} ' if WD else ''}{f'steps {STEPS} ' if STEPS != 1000 else ''}{'outbias ' if OUTBIAS else ''}{f'cap {CAP:g} ' if CAP else ''}{f'early {EARLY_N}x{EARLY_MULT:g} ' if EARLY_N else ''}{f'warm_hid {WARM_HID} ' if WARM_HID else ''}{'reset ' if RESET2 else ''}{f'lr1 {LR1:g} ' if LR1 else ''}{OPT}{f'(lr {MUON_LR:g})->{OPT2}@{SWITCH}' if SWITCH else ''} warm {WARM} emb {EMB_LR:g} lr {HID_LR:g} clip {CLIP:g} b2 {B2:g} seed {SEED}{f' data {DSEED}' if DSEED != SEED else ''}: val {v:.4f} rare {vr:.4f}  spikes {len(spikes)} {spikes[:6]}"
       f"  gn max {max(gnorms):.1f}  dead end {dead[-1][1:]}", flush=True)
 with open(os.path.join(HERE, OUT), "a") as f:
-    f.write(json.dumps(dict(opt=OPT, act=ACT, switch=SWITCH, opt2=OPT2 if SWITCH else None, warm=WARM, warm2=WARM2, muon_lr=MUON_LR if SWITCH else None, lr1=LR1, reset2=RESET2, warm_hid=WARM_HID, hid_lr=HID_LR, emb_lr=EMB_LR, clip=CLIP, b2=B2, wd=WD, mwd=MWD, hid=HID, batch=BATCH, outbias=OUTBIAS, cap=CAP, early_n=EARLY_N, early_mult=EARLY_MULT, seed=SEED, dseed=DSEED, steps=STEPS, val=round(v, 5),
+    f.write(json.dumps(dict(opt=OPT, act=ACT, switch=SWITCH, opt2=OPT2 if SWITCH else None, warm=WARM, warm2=WARM2, muon_lr=MUON_LR if SWITCH else None, lr1=LR1, reset2=RESET2, warm_hid=WARM_HID, hid_lr=HID_LR, emb_lr=EMB_LR, clip=CLIP, b2=B2, wd=WD, mwd=MWD, hid=HID, batch=BATCH, outbias=OUTBIAS, cap=CAP, early_n=EARLY_N, early_mult=EARLY_MULT, seed=SEED, dseed=DSEED, steps=STEPS, shift=SHIFT, shift_at=SHIFT_AT, shift_reset=SHIFT_RESET, shift_shrink=SHIFT_SHRINK, shift_noise=SHIFT_NOISE, val_pre=v_pre and round(v_pre, 5), val=round(v, 5),
                             val_rare=round(vr, 5), n_rare_chars=int(rare.sum()), spikes=spikes, loss=losses, gnorm=gnorms, dead=dead, wstat=wstat)) + "\n")

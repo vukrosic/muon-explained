@@ -282,3 +282,56 @@ Same data seen (512,000 predictions), split two ways: batch 512 × 1000 steps, o
 - **Fewer steps need larger lrs and a hot embedding.** Muon's best lr doubles at 250 steps (0.04 → 0.06–0.08). The embedding and output lr triples (0.01 → 0.03) for both; at 1000 steps 0.02 is worse than 0.01 for both (Muon 1.6240, Adam 1.6330).
 - **Adam needs a hidden-layer warmup at batch 2048.** Without one, every lr from 0.003 to 0.006 ends at 1.81–1.86 (lr 0.006 spikes on seed 0). 50 warmup steps bring it to 1.70, and β2 0.95 and embedding lr 0.03 to 1.68. Muon needs no warmup at any setting. Over the 144 runs, untuned Adam loses by up to 0.19; tuned Adam loses by 0.018.
 - **Limits.** One model, 3 seeds per setting. Seed spread at 250 steps is about 0.01, so the 0.015 and 0.018 leads are clear, but the two are not separable.
+
+## 16. Change the task halfway: Adam's network relearns worse than a fresh one, Muon's relearns better
+
+**Setup.** Train 1000 steps, then change the data and train 1000 more, with the lr schedule restarted (`SHIFT=perm SHIFT_AT=1000 STEPS=2000`). Two changes:
+- **perm**: every character is relabeled by a fixed random permutation, in the inputs and in what the model must predict. It is the same language under new names.
+- **rev**: the text is reversed, so the model predicts the character before the context.
+
+The score is the validation loss on the new data after the second 1000 steps, compared with a fresh model trained 1000 steps on that data. Width 512, lrs from section 10 (Muon 0.04 with weight decay 0.05, Adam 0.003 with weight decay 0.15), 3 seeds per row. Data in [lmshift.jsonl](lmshift.jsonl).
+
+**Relabeled characters, GELU.** A fresh model reaches Muon 1.6202, Adam 1.6275.
+
+| first 1000 steps → next 1000 steps | after the change | vs fresh | layer 2 dead at the end |
+|---|---|---|---|
+| Muon → Muon | **1.6150** | −0.005 | 0% |
+| Adam → Adam | 1.6835 | **+0.056** | 22–37% |
+| Adam → Adam, Adam state reset at the change | 1.6665 | +0.039 | 8–24% |
+| Adam → Adam, β2 0.95 | 1.6545 | +0.027 | 5–14% |
+| Adam → Adam, hidden-layer warmup 100 steps | 1.6538 | +0.026 | 0% |
+| Adam → Muon | 1.6349 | +0.015 (vs fresh Muon) | 0% |
+| Muon → Adam (fresh Adam state) | 1.6297 | +0.002 | 0–6% |
+| Muon → Adam, warmup 100 | 1.6162 | −0.011 | 0% |
+
+**Reversed text.** Fresh: Muon 1.6220, Adam 1.6316. After 1000 steps on forward text: Muon 1.5883 (−0.034), Adam 1.5835 (−0.048). Both reuse what they learned; Adam gains a little more.
+
+**Relabeled characters, ReLU.** Fresh (= the first phase): Muon 1.641, Adam 1.731. After the change: Muon 1.6784 (+0.037), Adam 1.8183 (+0.087, 50–64% of layer 1 dead).
+
+**What happens at the change (GELU, seed 0).**
+- The loss jumps from 1.25 to 6.4 and the gradient norm from 0.7 to 8, for both optimizers.
+- Adam's second-moment estimate still holds the small end-of-training gradients, so its first steps after the change are about 10× too large. 66% of layer 2 is dead (never positive on the probe inputs) 25 steps later, and 34% is still dead at step 2000.
+- Muon's update has a fixed size whatever the gradient norm, so nothing dies.
+
+**Dead units are not the whole story.** With a warmup after the change, Adam kills nothing and still ends 0.026 worse than fresh. The crossed rows separate the weights from the optimizer:
+- Muon starting from Adam's weights ends 0.020 worse than Muon starting from Muon's weights (1.6349 vs 1.6150).
+- Adam with warmup starting from Muon's weights matches Muon throughout (1.6162).
+
+So most of the loss is carried by the weights Adam trained. At the change they have larger norms (Frobenius 30–32 per matrix vs 20–25) and a lower stable rank (7–22 vs 25–44), and Adam's second phase does not raise the rank (layer 2 stays at 5–7).
+
+**Shrinking Adam's weights at the change** (`SHIFT_SHRINK`, all three hidden matrices multiplied by a factor):
+
+| at the change | after | vs fresh Adam 1.6275 |
+|---|---|---|
+| Adam, warmup 100, ×0.7 | 1.6376 | +0.010 |
+| Adam, warmup 100, ×0.5 | 1.6384 | +0.011 |
+| Adam, warmup 100, ×0.5 + 0.5 × fresh init (shrink and perturb) | 1.6360 | +0.009 |
+| Adam, warmup 100, ×0.7, β2 0.95 | **1.6228** | −0.005 |
+| Adam → Muon, ×0.7 | 1.6177 | −0.003 (vs fresh Muon) |
+| Muon, ×0.5 + 0.5 × fresh init | 1.6233 | +0.003 (Muon alone: −0.005) |
+| Adam with weight decay 0.6 instead (both phases), warmup 100 | 1.6510 | +0.024 |
+
+- **Shrinking removes about 0.017 of Adam's loss**, whether Adam or Muon trains afterwards. Stronger weight decay through the first phase does not do the same (1.6510).
+- **Adam needs three fixes to match a fresh Adam:** a warmup after the change, shrunk weights and β2 0.95. Muon needs none and ends below fresh.
+- Shrink and perturb, the published fix for lost plasticity, hurts Muon.
+- **Limits.** One model, 3 seeds (spread about 0.01), one change point. The lrs were tuned for single 1000-step runs, not for the second phase. Relabeling is an extreme change: every output row is wrong at once.
