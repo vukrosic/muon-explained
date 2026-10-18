@@ -193,3 +193,18 @@ Everything above is 1000 steps. Same model (GELU, embedding lr 0.01), now 3000 s
 - **The output-bias init from section 9 does not help at 3000 steps** (Adam 1.5238 vs 1.5265, Muon 1.5373 vs 1.5335, both at the old lrs without weight decay).
 
 So in this model Muon's advantage is a faster start, not a better end point. Sections 3, 7 and 8 found the start is where its lead is made; with a 3× budget Adam catches up. Not tested: longer than 3000 steps, wider models, or ReLU at 3000 steps.
+
+## 11. With ReLU, Muon still wins at 3000 steps, by 0.005
+
+Same 3000-step setup as section 10, ReLU instead of GELU, weight decay on both. Adam gets hidden-layer warmup (section 5), without which it is far behind (1.534, with 43–57% of layer 2 dead). Grid: Adam lr 0.0015–0.004, weight decay 0.3–0.8, warmup 200 or 500 steps; Muon lr 0.015–0.035, weight decay 0.035–0.07. 3 seeds, data in [lmlong.jsonl](lmlong.jsonl).
+
+| 3000 steps, ReLU | val loss | seeds | dead in layer 2 at the end |
+|---|---|---|---|
+| Adam, no warmup (lr 0.003, wd 0.3) | 1.5342 | 1.5387 / 1.5367 / 1.5273 | 43–57% |
+| Adam, best (lr 0.002, wd 0.5, hidden warmup 200) | 1.4914 | 1.4964 / 1.4871 / 1.4908 | 6–11% |
+| Muon, best (lr 0.02, wd 0.05) | **1.4865** | 1.4911 / 1.4831 / 1.4854 | 0% |
+| GELU for comparison: Adam / Muon, best (section 10) | 1.4768 / 1.4789 | | |
+
+- **Muon is lower on all 3 seeds**, by 0.0053, 0.0040 and 0.0054. At 1000 steps the ReLU gap was 0.021 (with warmup, no weight decay), so it shrinks with training but does not close, unlike GELU.
+- **Fits section 2:** units Adam kills at the start never come back, so even its best ReLU run trains with 6–11% fewer working units in layer 2 for all 3000 steps. More warmup kills fewer (500 steps: 3–6% dead) but ends no better (1.4962).
+- **GELU is the better choice for both here.** Adam gains 0.015 from it and Muon 0.008.
