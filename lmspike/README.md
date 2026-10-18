@@ -527,3 +527,21 @@ In section 23 every character was renamed, so the old output layer was entirely 
 - **Once the old layer is about as bad as a uniform guess, the optimizers part.** At 50%, Adam's gradient grows 2.4× after each change and 31% of layer 3 is dead 50 steps later. The reset gains 0.048. Muon's gradient grows 1.5×, under 2% of layer 3 dies, and the reset costs 0.022.
 - **Above that, the reset pays for both.** At 75%: 0.135 for Adam, 0.057 for Muon.
 - **A rule this suggests, not tested as an automatic method:** reset the output layer only when the loss right after a change is above a uniform guess (ln of the vocabulary size). For Muon the break-even point lies a little higher, between 50% and 75% renamed.
+
+## 26. Measured: after a change Adam's step doubles, Muon's shrinks
+
+Section 23 guessed that Adam's update grows after a change while Muon's stays fixed. `UPD=1` logs, every step, the total size of the change to the three hidden matrices (‖ΔW‖ summed), divided by the learning-rate multiplier of that step, so the lr schedule's restart at each change is taken out. Shown relative to the same number on task 1, steps 25–100. 12-task setup, seed 0. Data in [lmupd.jsonl](lmupd.jsonl).
+
+| setting | step 0 after a change | step 2 | step 4 | step 10 | step 20 | tasks 2–12 |
+|---|---|---|---|---|---|---|
+| Adam, β2 0.999 | 1.93× | 1.99× | 1.84× | 1.38× | 0.90× | 1.919 |
+| Adam, β2 0.95 | 1.27× | 1.36× | 1.25× | 0.92× | 0.70× | 1.893 |
+| Adam, fresh output layer | 1.04× | 1.17× | 1.09× | 0.98× | 0.96× | 1.741 |
+| Muon (ReLU, record lrs) | 0.64× | 0.64× | 0.65× | 0.71× | 0.79× | 1.825 |
+
+(each value averaged over the 11 changes)
+
+- **Adam's step about doubles for the first 10 steps after a change.** The large, new gradient from the old output layer raises Adam's first moment faster than its second-moment average (β2 0.999) can catch up. With β2 0.95 the second moment catches up sooner: 1.3× instead of 2×. That is why section 18's β2 0.95 helped.
+- **With a fresh output layer the gradient does not jump, and Adam's step stays at its normal size** (1.0–1.2×).
+- **Muon's step shrinks to 0.64×.** Newton–Schulz first divides the momentum by its total (Frobenius) size. When one large error direction dominates, every other direction becomes small after that division, and 2 rounds do not lift them back to full size, so the output is smaller. The same effect makes Muon's very first steps small (0.45× at task 1, steps 0–5; section 8). So Muon slows down by itself exactly when the gradient is large and one-sided, the opposite of Adam.
+- This explains section 25: with half the characters renamed, the gradient jump is small enough that Muon's 0.6× step does little damage, while Adam's doubled step already kills 31% of layer 3.

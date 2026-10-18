@@ -94,7 +94,7 @@ adam = torch.optim.AdamW([m.emb.weight, m.out.weight, m.out.bias], lr=EMB_LR, we
 hopt = torch.optim.AdamW(hid, lr=HID_LR, weight_decay=WD, betas=(0.9, B2))
 mom = [torch.zeros_like(p) for p in hid]
 m1 = [torch.zeros_like(p) for p in hid]; sq = [torch.zeros_like(p) for p in hid]   # Adam moments for the adamshape start
-losses, gnorms, dead, wstat = [], [], [], []   # wstat: [step, (Frobenius norm, top singular value) per hidden matrix]
+losses, gnorms, dead, wstat, upd = [], [], [], [], []   # upd: per step, [sum of ||Δw|| over hidden matrices, lr multiplier]   # wstat: [step, (Frobenius norm, top singular value) per hidden matrix]
 shifts = list(range(SHIFT_EVERY, STEPS, SHIFT_EVERY)) if SHIFT and SHIFT_EVERY else [SHIFT_AT] if SHIFT else []
 starts = [0] + [s for s in shifts if s]
 v_pres = []                                                   # validation loss just before each shift
@@ -136,6 +136,7 @@ for step in range(STEPS):
     m.zero_grad(); loss.backward()
     gn = torch.nn.utils.clip_grad_norm_(m.parameters(), CLIP if CLIP else math.inf)
     losses.append(round(loss.item(), 4)); gnorms.append(round(gn.item(), 4))
+    if os.environ.get("UPD") == "1": before = [p.detach().clone() for p in hid]
     for gr in adam.param_groups: gr["lr"] = EMB_LR * sched
     adam.step()
     cur = OPT2 if SWITCH and step >= SWITCH else OPT
@@ -163,6 +164,7 @@ for step in range(STEPS):
                     O = u * (O.norm() / (u.norm() + 1e-12))
                 if MWD: p.mul_(1 - MWD * (MUON_LR if SWITCH else HID_LR) * sched * em)
                 p.add_(O, alpha=-(MUON_LR if SWITCH else HID_LR) * sched * em)
+    if os.environ.get("UPD") == "1": upd.append([round(sum((p.detach() - q).norm().item() for p, q in zip(hid, before)), 5), round(sched * em, 5)])
     if CAP:
         with torch.no_grad():
             for p in hid:
@@ -177,5 +179,5 @@ spikes = [i for i in range(50, STEPS) if losses[i] > sorted(losses[i - 50:i])[25
 print(f"{ACT} {f'{SHIFT}@{SHIFT_AT}{"+" if SHIFT_EVERY else ""}{" reset" if SHIFT_RESET else ""}{f" shrink {SHIFT_SHRINK:g}+{SHIFT_NOISE:g}" if SHIFT_SHRINK != 1 or SHIFT_NOISE else ""} (before {v_pre:.4f}) ' if SHIFT and SHIFT_AT else f'{SHIFT} ' if SHIFT else ''}{f'batch {BATCH} ' if BATCH != 512 else ''}{f'hid {HID} ' if HID != 512 else ''}{f'mwd {MWD:g} ' if MWD else ''}{f'wd {WD:g} ' if WD else ''}{f'steps {STEPS} ' if STEPS != 1000 else ''}{'outbias ' if OUTBIAS else ''}{f'cap {CAP:g} ' if CAP else ''}{f'softcap {SOFTCAP:g} ' if SOFTCAP else ''}{f'lsmooth {LSMOOTH:g} ' if LSMOOTH else ''}{f'frac {SHIFT_FRAC:g} ' if SHIFT_FRAC < 1 else ''}{f'early {EARLY_N}x{EARLY_MULT:g} ' if EARLY_N else ''}{f'warm_hid {WARM_HID} ' if WARM_HID else ''}{'reset ' if RESET2 else ''}{f'rounds {ROUNDS} ' if ROUNDS != 2 else ''}{f'emb_reset {EMB_RESET} ' if EMB_RESET else ''}{f'lr1 {LR1:g} ' if LR1 else ''}{OPT}{f'(lr {MUON_LR:g})->{OPT2}@{SWITCH}' if SWITCH else ''} warm {WARM} emb {EMB_LR:g} lr {HID_LR:g} clip {CLIP:g} b2 {B2:g} seed {SEED}{f' data {DSEED}' if DSEED != SEED else ''}: val {v:.4f} rare {vr:.4f}  spikes {len(spikes)} {spikes[:6]}"
       f"  gn max {max(gnorms):.1f}  dead end {dead[-1][1:]}", flush=True)
 with open(os.path.join(HERE, OUT), "a") as f:
-    f.write(json.dumps(dict(opt=OPT, act=ACT, switch=SWITCH, opt2=OPT2 if SWITCH else None, warm=WARM, warm2=WARM2, muon_lr=MUON_LR if SWITCH else None, lr1=LR1, reset2=RESET2, warm_hid=WARM_HID, hid_lr=HID_LR, emb_lr=EMB_LR, clip=CLIP, b2=B2, wd=WD, mwd=MWD, hid=HID, batch=BATCH, outbias=OUTBIAS, cap=CAP, softcap=SOFTCAP, lsmooth=LSMOOTH, shift_frac=SHIFT_FRAC, emb_reset=EMB_RESET, rounds=ROUNDS, early_n=EARLY_N, early_mult=EARLY_MULT, seed=SEED, dseed=DSEED, steps=STEPS, shift=SHIFT, shift_at=SHIFT_AT, shift_every=SHIFT_EVERY, val_pres=v_pres, shift_reset=SHIFT_RESET, shift_shrink=SHIFT_SHRINK, shift_noise=SHIFT_NOISE, val_pre=v_pre and round(v_pre, 5), val=round(v, 5),
+    f.write(json.dumps(dict(opt=OPT, act=ACT, switch=SWITCH, opt2=OPT2 if SWITCH else None, warm=WARM, warm2=WARM2, muon_lr=MUON_LR if SWITCH else None, lr1=LR1, reset2=RESET2, warm_hid=WARM_HID, hid_lr=HID_LR, emb_lr=EMB_LR, clip=CLIP, b2=B2, wd=WD, mwd=MWD, hid=HID, batch=BATCH, outbias=OUTBIAS, cap=CAP, softcap=SOFTCAP, lsmooth=LSMOOTH, shift_frac=SHIFT_FRAC, emb_reset=EMB_RESET, upd=upd, rounds=ROUNDS, early_n=EARLY_N, early_mult=EARLY_MULT, seed=SEED, dseed=DSEED, steps=STEPS, shift=SHIFT, shift_at=SHIFT_AT, shift_every=SHIFT_EVERY, val_pres=v_pres, shift_reset=SHIFT_RESET, shift_shrink=SHIFT_SHRINK, shift_noise=SHIFT_NOISE, val_pre=v_pre and round(v_pre, 5), val=round(v, 5),
                             val_rare=round(vr, 5), n_rare_chars=int(rare.sum()), spikes=spikes, loss=losses, gnorm=gnorms, dead=dead, wstat=wstat)) + "\n")
