@@ -482,9 +482,119 @@ Steps to 90% held-out within a phase, first visit → second visit:
 | Muon | 0.97, 0.98 | 0.98, 0.99 | ≤ 0.04 |
 | Muon, replay 10% | 0.94, 0.95 | 0.99, 0.98 | **0.49–0.57, 0.80–0.90** |
 
-- **Clipping does not fix Adam here.** Adam fails × on the first visit in 7 of 8 runs across all four Adam variants; Muon fails it in 0 of 4. This failure is not a spike; × arrives after + and − are solved and the units it needs are already off.
+- **Clipping does not fix Adam here.** Adam fails × on the first visit in 7 of 8 runs across all four Adam variants; Muon fails it in 0 of 4. This failure is not a spike. It is also not dead units: with continual backprop or shrink and perturb almost no units are dead and × still fails ([see the literature tests below](#do-the-plasticity-fixes-work-for-adam-ops-sequence-2-seeds-03)).
 - **Replay keeps old ops, and Adam keeps more of them.** With 10% replay alone, Adam ends with old ops at 0.79–0.99, Muon at 0.49–0.90. Muon also needs 1900 steps for × with replay, against 1300–1600 without. This matches the earlier finding that [Muon forgets a removed op 2–10× faster](#does-the-partner-protect-an-op-from-being-forgotten): Muon's full-size update with lr-scaled weight decay moves every direction every step, including the ones that hold old ops.
 
 **In one line:** Muon keeps the ability to learn new tasks (plasticity), Adam keeps old tasks better when they are still shown a little (retention). Without replay, both forget within 10–20 steps.
 
 **Limits.** One tiny model, one task family, 2–4 seeds, one setting per optimizer chosen on + alone. Phases are 2000 steps at a constant lr; a schedule restarted per phase was not tested (the [swap test](#is-it-the-trained-network-or-the-optimizer-that-follows-swap-them) showed warmup matters for Adam). Earlier claims stand: the "Muon forgets faster" result above also holds with replay here.
+
+## What the forgetting literature predicts, tested on this model
+
+Five claims from the continual-learning literature, re-run on the [continual-learning setup above](#continual-learning-one-op-at-a-time-then-all-again). Same model, same settings, 2000 steps per phase. New knobs in [cl.py](cl.py): `CBP`, `SP`, `WD2`, partial renamings `+qXX`, and phase-end diagnostics (dead units, weight size, feature rank, update rank, layer reset).
+
+| paper | claim | here |
+|---|---|---|
+| [Ramasesh, Dyer, Raghu 2021](https://arxiv.org/abs/2007.07400) | forgetting sits in the top layers | **only for renamed answers**; between different ops, all layers |
+| [Ramasesh, Dyer, Raghu 2021](https://arxiv.org/abs/2007.07400) | forgetting is worst at medium task similarity | **no**: damage grows steadily with the share of renamed answers |
+| [Dohare et al. 2024, Nature](https://arxiv.org/abs/2306.13812) | plasticity loss comes with dead units, growing weights, falling feature rank | **yes, under Adam**; none of the three under Muon |
+| [Dohare et al. 2024](https://arxiv.org/abs/2306.13812), [Ash & Adams 2020](https://arxiv.org/abs/1910.08475) | continual backprop and shrink-and-perturb restore plasticity | **partly**: they stop Adam's collapse, but not its failure to generalize × |
+| [2609.24678](https://arxiv.org/abs/2609.24678), [2608.27518](https://arxiv.org/abs/2608.27518) | Muon spreads each update over many directions, so it disturbs other tasks less | **yes**: update rank 186–207 vs Adam 205 → 12; old answers dip 2–4× less |
+
+Results: [cl_lit.jsonl](cl_lit.jsonl) (ops sequence ×2, seeds 0–3), [cl_sim.jsonl](cl_sim.jsonl) (+ then one other task, seeds 0, 1, check every 10 steps), [cl_wd.jsonl](cl_wd.jsonl), [cl_plast.jsonl](cl_plast.jsonl).
+
+### Which layers hold the forgotten op? Put old layers back
+
+At the end of a phase, copy some layers back to their values at the end of the previous phase, then measure the previous task. Ramasesh et al. found that putting back the top layers alone brings most of the old task back.
+
+Different ops (cl_lit, every op change where the old op was learned: 22 under Adam, 28 under Muon). Accuracy on the old op:
+
+| layers put back | Adam | Muon |
+|---|---|---|
+| any one layer alone | ≤ 0.33 (median 0.01) | ≤ 0.33 (median 0.01) |
+| out | 0.01–0.03 | 0.01–0.03 |
+| out + h2 | 0.01–0.03 | 0.01–0.03 |
+| out + h2 + h1 | ≤ 0.13 | ≤ 0.16 |
+| out + h2 + h1 + inp | 0.82–1.00 (median 0.98) | 0.34–0.99 (median 0.99) |
+
+Renamed answers (cl_sim, + first, then a share q of its answers renamed). Accuracy on the old + labels after putting back out alone:
+
+| q renamed | Adam | Muon |
+|---|---|---|
+| 10% | 0.93, 0.97 | 0.94, 0.96 |
+| 25% | 0.85, 0.90 | 0.89, 0.91 |
+| 50% | 0.54, 0.66 | 0.82, 0.84 |
+| 75% | 0.16, 0.19 | 0.65, 0.67 |
+| 100% (+1) | 0.04, 0.06 | 0.35, 0.50 |
+
+- **Between different ops, the first layer is changed too.** Nothing comes back until all four weight layers are put back. Each phase moves h1 by 1.0–1.8× its own size. Under Muon, × and ÷ come back only to 0.34–0.42 even then: the embedding also moved.
+- **For renamed answers, the output layer holds the change, as in Ramasesh et al.** Up to 25% renamed, the old output layer alone gives back 0.85–0.97 under both.
+- **Under Muon, more of a renaming stays in the output layer.** At 75% renamed, the old output layer gives back 0.65–0.67 under Muon and 0.16–0.19 under Adam. The output layer uses AdamW in both runs, so the difference comes from the hidden layers: Adam rewires them more.
+- Putting back out + h2 is often worse than out alone (Adam q = 10%: 0.16 vs 0.93 in seed 0). The new h2 and new out were trained together, and the old out fits the new h2 better than the old h2 does.
+
+### Is forgetting worst at medium similarity? Rename a share of the answers
+
+cl_sim: train + for 2000 steps, then a task where a share q of +'s answers is renamed and the rest stays. The unrenamed answers are part of both tasks. Lowest accuracy on them in the new task, reached 10–30 steps in (seeds 0, 1):
+
+| q renamed | Adam | Muon |
+|---|---|---|
+| 10% | 0.55, 0.80 | **0.94, 0.94** |
+| 25% | 0.45, 0.72 | **0.89, 0.84** |
+| 50% | 0.18, 0.19 | **0.68, 0.48** |
+| 75% | 0.00, 0.04 | **0.20, 0.22** |
+
+- **No medium-similarity peak.** The damage to answers that did not change grows steadily with q. Ramasesh et al. vary similarity by mixing inputs of two tasks; this test varies how many labels change, so it is a related claim, not the same one.
+- **Both recover fully.** By the end, the unrenamed answers are back at 1.00 and + accuracy equals 1 − q.
+- **Muon disturbs untouched answers 2–4× less.** This matches the direction of [2608.27518](https://arxiv.org/abs/2608.27518), which bounds interference by the spectral norm of the update. The mechanism differs here: Muon's whole-phase change has the larger spectral norm ([update rank below](#how-many-directions-does-each-phases-update-use)), so its spread over many directions fits the result better. It also matches [section 26 of lmspike](../lmspike/README.md): after a change, Adam's step grows and Muon's shrinks.
+
+### Dead units, weight size, feature rank (cl_lit, medians over 4 seeds)
+
+| | phase 0 → 1 → 2 → later | Muon |
+|---|---|---|
+| dead h1 units (Adam) | 0.00 → 0.27 → 0.86 → 0.94–0.96 | 0.00 throughout |
+| mean weight size (Adam) | 0.10 → … → 0.23 | 0.09 → 0.13 |
+| feature rank of h1 (Adam) | 16.8 → … → 3.9–4.4 | 121–150 |
+
+Feature rank is the effective rank (exp of the entropy of the normalized singular values) of h1's outputs on 2000 held-out rows; the maximum is 256.
+
+- **All three of Dohare et al.'s signs appear under Adam, none under Muon.** The Adam seed that stops learning (s1) has 75–87% of h1 dead and feature rank 2.2–5.1.
+
+### Is weight decay the cause? Turn it off after the first phase
+
+Adam's WD is 3, high for this model. cl_wd sets weight decay to 0 or 0.1 from phase 1 on (seeds 0, 1):
+
+- Old + is still at 0.01–0.02 at the end of the next phase. Weight decay is not what erases it.
+- Without weight decay, × is not learned (held-out 0.02–0.06 Adam, 0.02–0.03 Muon), and ÷ fails (Adam 0.02–0.12, Muon 0.01–0.02). On this task, generalizing needs weight decay.
+
+### How many directions does each phase's update use?
+
+Effective rank of the h1 weight change over a whole phase (max 256), median over 4 seeds:
+
+| phase | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 |
+|---|---|---|---|---|---|---|---|---|
+| Adam | 205 | 60 | 37 | 25 | 18 | 16 | 14 | 12 |
+| Muon | 186–207 throughout | | | | | | | |
+
+- **Adam's updates collapse into a few directions phase by phase.** [2609.24678](https://arxiv.org/abs/2609.24678) reports AdamW updates in 1.4–1.8 effective directions vs Muon ~7; here the same gap shows over whole phases.
+- **Muon's updates are not smaller.** The largest singular value of the h1 change is 1.85–2.17 under Muon vs 1.1–1.6 under Adam. Muon is gentler on other tasks because its change is spread, not because it is small.
+- The output layer uses AdamW in both runs, yet its update rank is 56–80 in Muon runs vs 28–55 in Adam runs. The hidden optimizer shapes what the last layer sees.
+
+### Do the plasticity fixes work for Adam? (ops sequence ×2, seeds 0–3)
+
+`CBP=0.001`: continual backprop (Dohare et al.): every step, replace 0.1% of each hidden layer's units, the lowest-utility ones older than 100 steps, with fresh input weights and zero output weights. `SP=0.4,0.4`: shrink and perturb (Ash & Adams): at the start of each phase, w ← 0.4·w + 0.4·fresh initial weights, for all four weight layers.
+
+| Adam | × first visit (held-out / train) | × second visit | + second visit | seeds that stop learning | dead h1 at the end | feature rank h1 at the end |
+|---|---|---|---|---|---|---|
+| plain | 0.22–0.96 / 0.98–1.00 | 0.99, 0.02, 0.99, 1.00 | 1.00, 0.01, 1.00, 0.99 | 1 of 4 | 0.75–0.98 | 3.0–5.1 |
+| continual backprop | 0.02–0.04 / 0.92–1.00 | 0.93–1.00 | 0.73, 0.76, 1.00, 1.00 | 0 of 4 | 0.12–0.56 | 34–61 |
+| shrink and perturb | 0.03–0.07 / 0.97–1.00 | **1.00 in all 4** | **1.00 in all 4** | 0 of 4 | 0.12–0.39 | 6.5–9.8 |
+| fresh Adam, × alone | 0.96–1.00 / 1.00 | — | — | — | — | — |
+
+- **Both fixes stop the collapse.** No fix run stops learning; plain Adam seed 1 learns nothing after phase 4. Shrink and perturb learns every phase after the first × in all 4 seeds; continual backprop leaves + at 0.73 and 0.76 in two seeds. Dead units fall from 0.75–0.98 to 0.12–0.56.
+- **Neither fixes × on its first visit; both make it worse.** The network fits the × training pairs (train 0.92–1.00) but does not find the rule (held-out 0.02–0.07). Plain Adam reaches 0.22–0.96, and a fresh Adam run learns × alone to 0.96–1.00 in the same 2000 steps.
+- **So the × failure is not caused by dead units.** Under shrink and perturb, at most 1% of h1 is dead when × starts (plain Adam: median 27%), and × still fails. The earlier dead-unit explanation in the [replay section](#do-replay-or-clipping-fix-adam-ops-sequence-seeds-0-1) is corrected there. The failure is to generalize, not to train, which is the warm-start effect Ash & Adams describe. Their fix (shrink and perturb) does not remove it here; the embedding and Adam's moment estimates, both left untouched by it, are the untested suspects.
+- Muon learns × on the first visit to 0.97–0.98 in all 4 seeds with no fix.
+
+**In one line:** Adam reproduces the loss-of-plasticity picture (dead units, big weights, low rank, low-rank updates) and the standard fixes cure the collapse, but not the memorize-instead-of-generalize failure; Muon shows none of these signs, and its spread-out updates disturb untouched answers 2–4× less. Forgetting between different ops is not confined to the top layers in either.
+
+**Limits.** One tiny model, one task family, 2–4 seeds. One setting per fix (CBP rate 0.001, SP 0.4/0.4), not tuned. Continual backprop was not run under Muon. The similarity test varies labels, not inputs as in Ramasesh et al. The paper numbers quoted are from their abstracts and main results.
