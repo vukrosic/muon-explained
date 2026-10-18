@@ -335,3 +335,19 @@ So most of the loss is carried by the weights Adam trained. At the change they h
 - **Adam needs three fixes to match a fresh Adam:** a warmup after the change, shrunk weights and β2 0.95. Muon needs none and ends below fresh.
 - Shrink and perturb, the published fix for lost plasticity, hurts Muon.
 - **Limits.** One model, 3 seeds (spread about 0.01), one change point. The lrs were tuned for single 1000-step runs, not for the second phase. Relabeling is an extreme change: every output row is wrong at once.
+
+## 17. Twelve task changes in a row: Muon stays flat, Adam breaks
+
+Section 16's change repeated: every 500 steps the characters are relabeled by a new random permutation, and the lr schedule restarts (`SHIFT=perm SHIFT_EVERY=500 STEPS=6000`, 12 tasks). The score of each task is the validation loss at its end, on its own labels. GELU, same lrs as section 16. Muon and Adam 3 seeds; Adam with the section 16 fixes (warmup 100, β2 0.95, weights ×0.7 at every change) 2 seeds. Data in [lmshift12.jsonl](lmshift12.jsonl) and, for 6 tasks, [lmshift.jsonl](lmshift.jsonl).
+
+| validation loss at the end of task | 1 (fresh) | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| Muon | 1.762 | 1.738 | 1.744 | 1.741 | 1.738 | 1.743 | 1.753 | 1.736 | 1.748 | 1.743 | 1.756 | 1.754 |
+| Adam | 1.791 | 1.803 | 1.852 | 1.897 | 1.856 | 2.114 | 1.916 | 1.898 | 1.990 | 1.924 | 1.951 | 1.940 |
+| Adam + fixes | 1.805 | 1.766 | 1.753 | 1.748 | 1.746 | 1.752 | 1.761 | 1.742 | 1.759 | 1.760 | 1.774 | 1.765 |
+
+- **Muon gets better after the first change and stays there.** Tasks 2–12 average 1.746, against 1.762 when fresh. No layer-2 unit dies in any run, and the largest gradient norm in 6000 steps is 7.
+- **Adam gets worse with every few changes.** Tasks 7–12 average 1.937, 0.15 above its fresh 1.791. 64–91% of layer 2 is dead at the end of each of those tasks, and gradient norms reach 78–204. Task 6 is the worst for all 3 seeds (2.10–2.13), but the same permutation costs Muon nothing (1.737–1.749).
+- **The section 16 fixes hold up over 12 changes.** Adam + fixes averages 1.760 over tasks 7–12, 0.012 above Muon, with at most 5% of layer 2 dead. Its first task is 0.014 worse than plain Adam, because the warmup and β2 0.95 cost something on a fresh 500-step run.
+- **Muon may be drifting up slightly:** tasks 2–6 average 1.741, tasks 7–12 1.748. That difference is below the 0.01 seed spread, so it is not established.
+- **Limits.** One model, relabeling only (each new task is the same language under new names), 500 steps per task, lrs not retuned for the repeated setting.
