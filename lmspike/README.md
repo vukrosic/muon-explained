@@ -546,3 +546,25 @@ Section 23 guessed that Adam's update grows after a change while Muon's stays fi
 - **Muon's step shrinks to 0.64×.** Newton–Schulz first divides the momentum by its total (Frobenius) size. When one large error direction dominates, every other direction becomes small after that division, and 2 rounds do not lift them back to full size, so the output is smaller. The same effect makes Muon's very first steps small (0.45× at task 1, steps 0–5; section 8). So Muon slows down by itself exactly when the gradient is large and one-sided, the opposite of Adam.
 - **Step size is not the whole story.** Section 20 gave Adam's update shape Muon's size, which shrinks after a change, and it still broke down (46–82% of layer 2 dead). Both the doubled step and the one-sided shape of Adam's update do damage. Muon avoids both, and a fresh output layer removes the large gradient that triggers both.
 - This fits section 25 (not measured at 50% renamed): there the gradient jump is smaller, Muon's shrunken step does little damage, and Adam's larger step already kills 31% of layer 3.
+
+## 27. A realistic shift: Python code ↔ English Python docs. Nothing breaks, and the reset hurts slightly
+
+**Setup.** `SHIFT=prose`. The 12 tasks alternate between the Python stdlib source (code) and the English text of Python's own help pages (`pydoc_data.topics`, ASCII only, 90/10 split). Each task lasts 500 steps, for 6000 steps in total. Results are in [lmprose.jsonl](lmprose.jsonl).
+
+| run | seed | code task 1 | code tasks 3–11 | last code | prose mean | last prose | loss right after a change |
+|---|---|---|---|---|---|---|---|
+| Adam GELU | 0 | 1.812 | 1.567 | 1.542 | **1.292** | **1.264** | 1.71 |
+| Adam GELU, fresh output | 0 | 1.812 | 1.564 | 1.538 | 1.305 | 1.281 | 4.57 |
+| Muon ReLU | 0 | 1.769 | 1.598 | 1.578 | 1.310 | 1.284 | 1.83 |
+| Muon ReLU, fresh output | 0 | 1.769 | 1.604 | 1.590 | 1.323 | 1.299 | 4.57 |
+| Muon GELU | 0 | 1.774 | 1.596 | 1.581 | 1.315 | 1.297 | |
+| Adam GELU | 1 | 1.784 | 1.559 | 1.528 | 1.298 | 1.280 | |
+| Muon ReLU | 1 | 1.759 | 1.597 | 1.571 | 1.312 | 1.286 | |
+| Muon GELU | 1 | 1.752 | 1.597 | 1.572 | 1.319 | 1.303 | |
+
+**What it means.**
+
+- **Nothing breaks down here.** The old output layer is mostly right on the new text: the loss right after a change is 1.7–1.8, against 4.57 for a uniform guess. This is section 25's rule, now on real data. The reset pays only when the old output layer is worse than a uniform guess. It is not worse here, so a fresh output layer costs 0.01–0.02 on prose.
+- **Adam beats Muon on this shift.** On both seeds and in every column after task 1, Adam ends lower: code by 0.03–0.04, prose by 0.01–0.04. Muon leads only in the first task (1.77 vs 1.81), the same short-run lead as in sections 3–15.
+- **Adam's dead units stay limited** (up to 27–33% in layer 3, against near-total death under random relabelings). They do not cost it the lead.
+- **Limits.** 2 seeds, one tiny model, one pair of datasets. The Muon advantage in sections 16–22 belongs to random relabelings, an adversarial shift. On this shift between two related texts, Adam's ordinary long-run lead from section 10 holds.

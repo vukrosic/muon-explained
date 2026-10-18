@@ -58,6 +58,11 @@ LSMOOTH = float(os.environ.get("LSMOOTH", 0))               # label smoothing in
 SHIFT_FRAC = float(os.environ.get("SHIFT_FRAC", 1))         # < 1 with SHIFT=perm: only this share of the characters is relabeled (among themselves), the rest keep their labels
 CAP = float(os.environ.get("CAP", 0))                       # > 0: diagnostic, after every step clip each hidden matrix's singular values to <= CAP (exact SVD)
 
+if SHIFT == "prose":
+    import numpy as np, pydoc_data.topics as _pt
+    _s = "".join(c for c in " ".join(_pt.topics.values()) if 32 <= ord(c) < 127 or c == "\n")
+    _d = T.lut[torch.from_numpy(np.frombuffer(_s.encode("ascii"), dtype=np.uint8).astype(np.int64))]
+    alt_tr, alt_va = _d[: int(0.9 * len(_d))], _d[int(0.9 * len(_d)):]
 counts = torch.bincount(train, minlength=V).float()
 order = counts.argsort()
 cum = counts[order].cumsum(0) / counts.sum()
@@ -107,9 +112,11 @@ for step in range(STEPS):
                 gp = torch.Generator().manual_seed(199 + shifts.index(step)); k = round(SHIFT_FRAC * V)
                 idx = torch.randperm(V, generator=gp)[:k]; P = torch.arange(V); P[idx] = idx[torch.randperm(k, generator=gp)]
             train, val, rare = P[train], P[val], rare[P.argsort()]
+        elif SHIFT == "prose":                # alternate Python source and the English Python docs (pydoc_data.topics)
+            train, val, alt_tr, alt_va = alt_tr, alt_va, train, val
         else:
             train, val = train.flip(0), val.flip(0)
-        probe = val[probe_ix[:, None] + torch.arange(CTX)]
+        probe = val[(probe_ix % (len(val) - CTX - 1))[:, None] + torch.arange(CTX)]
         if step and (SHIFT_SHRINK != 1 or SHIFT_NOISE):
             torch.manual_seed(500 + SEED); fresh = Net()
             with torch.no_grad():
