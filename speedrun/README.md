@@ -106,6 +106,23 @@ From [the GELU start experiments](../lmspike/README.md#8-muons-start-is-a-little
 
 Better on 4 of 5 seeds, but the gain is below the 0.01 seed spread and seed 0 (the scored one) moves by only 0.0003, so it is not entered as a record. 10 steps at 2× or 5× were worse than record 3 on seeds 0 and 1.
 
+## Three rounds at the size of two
+
+From [lmspike section 21](../lmspike/README.md#21-more-newtonschulz-rounds-more-even-updates-fewer-deaths-lower-loss-after-changes): over 12 task changes, 3 Newton–Schulz rounds rescaled to the size of the 2-round output beat 2 rounds on every seed. Here `ROUNDS=3, MATCH=2` reads the size after round 2 on the way and rescales the 3-round result to it, so the step size stays record 3's and only the shape changes. Cost 9,815 GFLOP (67% of the cap). [match.py](match.py), data in [match.jsonl](match.jsonl).
+
+| seed | record 3 | 3 rounds at 2-round size | difference |
+|---|---|---|---|
+| 0 | 1.6297 | 1.6281 | −0.0016 |
+| 1 | 1.6201 | 1.6239 | +0.0038 |
+| 2 | 1.6307 | 1.6280 | −0.0027 |
+| 3 | 1.6320 | 1.6276 | −0.0044 |
+| 4 | 1.6315 | 1.6317 | +0.0002 |
+| mean | 1.6288 | 1.6279 | −0.0009 |
+
+**A tie at record 3's settings.** Muon lr 0.03 (1.6399, 1.6323 on seeds 0, 1) and 0.015 (1.6407, 1.6309) are worse.
+
+**At other settings it helps.** With Muon lr 0.04 and AdamW lr 0.01, 3 rounds beat 2 by 0.011 and 0.007 (seeds 0, 1: 1.6391 vs 1.6496, 1.6269 vs 1.6339), but both are worse than record 3. In lmspike with ReLU at those settings, 3 rounds beat 2 on 4 of 4 seeds (−0.005 to −0.011); with GELU at its tuned lr 0.04, on 5 of 5 (mean 1.6128 vs 1.6209). So the extra round fixes part of what a too-large Muon lr costs, and gives nothing once the lrs are tuned for 2 rounds. Not a record.
+
 ## Earlier version: time to reach 1.68 (retired)
 
 The first version scored training seconds to reach validation loss 1.68: baseline 24.1 s, record 2 (3 rounds) 15.8 s. It was retired because wall-clock time changes with whatever else runs on the laptop. A game in the background moved the same run from 5.6 s to 7.5 s. Those runs are in [runs-v1-wallclock.jsonl](runs-v1-wallclock.jsonl).

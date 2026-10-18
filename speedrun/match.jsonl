@@ -1,0 +1,16 @@
+{"rounds": 2, "match": 0, "seed": 0, "extra": [], "val": 1.62965, "gflop": 7399}
+{"rounds": 3, "match": 2, "seed": 2, "extra": [], "val": 1.62796, "gflop": 9815}
+{"rounds": 3, "match": 2, "seed": 0, "extra": [], "val": 1.6281, "gflop": 9815}
+{"rounds": 3, "match": 2, "seed": 1, "extra": [], "val": 1.62395, "gflop": 9815}
+{"rounds": 2, "match": 0, "seed": 0, "extra": ["MUON_LR=0.03"], "val": 1.64293, "gflop": 7399}
+{"rounds": 2, "match": 0, "seed": 1, "extra": ["MUON_LR=0.03"], "val": 1.64166, "gflop": 7399}
+{"rounds": 3, "match": 2, "seed": 1, "extra": ["MUON_LR=0.03"], "val": 1.6323, "gflop": 9815}
+{"rounds": 3, "match": 2, "seed": 0, "extra": ["MUON_LR=0.03"], "val": 1.63995, "gflop": 9815}
+{"rounds": 3, "match": 2, "seed": 1, "extra": ["MUON_LR=0.015"], "val": 1.63092, "gflop": 9815}
+{"rounds": 3, "match": 2, "seed": 4, "extra": [], "val": 1.63168, "gflop": 9815}
+{"rounds": 3, "match": 2, "seed": 3, "extra": [], "val": 1.62762, "gflop": 9815}
+{"rounds": 3, "match": 2, "seed": 0, "extra": ["MUON_LR=0.015"], "val": 1.64074, "gflop": 9815}
+{"rounds": 2, "match": 0, "seed": 0, "extra": ["MUON_LR=0.04", "ADAM_LR=0.01"], "val": 1.64964, "gflop": 7399}
+{"rounds": 2, "match": 0, "seed": 1, "extra": ["MUON_LR=0.04", "ADAM_LR=0.01"], "val": 1.63392, "gflop": 7399}
+{"rounds": 3, "match": 2, "seed": 1, "extra": ["MUON_LR=0.04", "ADAM_LR=0.01"], "val": 1.62694, "gflop": 9815}
+{"rounds": 3, "match": 2, "seed": 0, "extra": ["MUON_LR=0.04", "ADAM_LR=0.01"], "val": 1.63906, "gflop": 9815}

@@ -35,6 +35,7 @@ ROW_BETA = 0                                             # > 0: per-neuron norma
 SPEC = 0                                                 # 0: divide by total size; k > 0: by the largest strength, k power steps
 SAFE = 1.05                                              # with SPEC, divide by SAFE x the estimate (an underestimate would blow up)
 EARLY_N, EARLY_MULT = 0, 1.0                             # Muon lr times EARLY_MULT for the first EARLY_N steps
+MATCH = 0                                                # > 0: rescale the result to its size after MATCH rounds (shape of ROUNDS rounds, step size of MATCH)
 
 
 def flatten(G, v=None):
@@ -47,9 +48,13 @@ def flatten(G, v=None):
         X = G / (SAFE * (G @ v).norm() + 1e-7)
     else:
         X = G / (G.norm() + 1e-7)
-    for a, b, c in COEFS or [ABC] * ROUNDS:
+    for k, (a, b, c) in enumerate(COEFS or [ABC] * ROUNDS):
+        if MATCH and k == MATCH:
+            size = X.norm()
         A = X @ X.T
         X = a * X + ((b * A + c * A @ A) if c else b * A) @ X   # c = 0: cubic round, one multiply fewer
+    if MATCH and MATCH < ROUNDS:
+        X = X * (size / (X.norm() + 1e-12))
     return X
 
 
