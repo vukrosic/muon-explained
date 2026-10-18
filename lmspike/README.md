@@ -129,3 +129,23 @@ With no dead units left, what is the remaining 0.010? Same setup as section 6 (G
 - **Capping the strengths does not fix it.** Clipping every hidden matrix's strengths to at most 3 after each step (exact SVD) makes both worse: Adam 1.646, Muon 1.645 (seed 0).
 
 **Reading.** In this model Muon's early updates are small because the early gradient is close to rank 1, which works like a warmup that ends by itself when the gradient spreads. A run that takes a few full-size steps early gets stuck in a lower-rank state. An Adam warmup does not reproduce this (warmup 50/100/200 gives 1.642/1.641/1.648), likely because Adam's later directions are also worse. Untested: whether the same holds in a larger model or a longer run.
+
+## 8. Muon's start is a little too small: 3× lr for the first 10 steps
+
+If 30× Muon's lr for 10 steps hurts and Adam-sized steps hurt, is Muon's own start the best size? Muon with its lr multiplied for the first N steps (GELU, embedding lr 0.01, Muon lr 0.03, 3 seeds):
+
+| first steps | validation loss |
+|---|---|
+| 10 at 0.1× | 1.631 |
+| plain Muon | 1.627 |
+| 10 at 2× (25 steps) | 1.627 |
+| **10 at 3×** | **1.622** |
+| 10 at 5× | 1.626 |
+| 10 at 10× | 1.628 |
+| 25 at 3× | 1.628 |
+| 50 at 3× | 1.633 |
+| 10 at 30× | 1.661 |
+
+10 steps at 3× is better than plain Muon on 6 of 6 seeds (seeds 3–5 added: 1.6272 / 1.6213 / 1.6282 vs 1.6274 / 1.6316 / 1.6301). 6-seed means: 1.6237 vs 1.6285, a gain of 0.005. Small, but every seed agrees. Longer boosts (25 or 50 steps) lose it.
+
+On the speedrun's ReLU record settings the same boost gives 4 of 5 seeds better, mean 0.0036 (see [speedrun README](../speedrun/README.md#early-muon-lr-boost)).

@@ -91,6 +91,21 @@ It helps on 4 of 5 seeds. The differences spread by about 0.005 from seed to see
 - **Limits.** One tiny model, 3 seeds. Learning rates were tuned for 2 rounds, not for each p. Experiment 2 (lr 0.01, 2 seeds, other settings) found p = 0 to 0.5 within seed noise; with record 3's settings the gap is consistent across seeds.
 - **Next.** A Newton–Schulz curve with no SVD whose output follows S^0.25 to S^0.5 could beat record 3 legally.
 
+## Early Muon lr boost
+
+From [the GELU start experiments](../lmspike/README.md#8-muons-start-is-a-little-too-small-3-lr-for-the-first-10-steps): Muon's first updates are tiny because the early gradient is close to rank 1. Here Muon's lr is multiplied by 3 for the first 10 steps (`EARLY_N=10, EARLY_MULT=3`), record 3 otherwise. No extra compute. [early_boost.py](early_boost.py), data in [early_boost.jsonl](early_boost.jsonl).
+
+| seed | record 3 | 10 steps at 3× | difference |
+|---|---|---|---|
+| 0 | 1.6297 | 1.6294 | −0.0003 |
+| 1 | 1.6201 | 1.6206 | +0.0005 |
+| 2 | 1.6307 | 1.6202 | −0.0105 |
+| 3 | 1.6320 | 1.6267 | −0.0053 |
+| 4 | 1.6315 | 1.6289 | −0.0026 |
+| mean | 1.6288 | **1.6252** | **−0.0036** |
+
+Better on 4 of 5 seeds, but the gain is below the 0.01 seed spread and seed 0 (the scored one) moves by only 0.0003, so it is not entered as a record. 10 steps at 2× or 5× were worse than record 3 on seeds 0 and 1.
+
 ## Earlier version: time to reach 1.68 (retired)
 
 The first version scored training seconds to reach validation loss 1.68: baseline 24.1 s, record 2 (3 rounds) 15.8 s. It was retired because wall-clock time changes with whatever else runs on the laptop. A game in the background moved the same run from 5.6 s to 7.5 s. Those runs are in [runs-v1-wallclock.jsonl](runs-v1-wallclock.jsonl).

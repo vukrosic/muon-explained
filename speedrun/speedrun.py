@@ -34,6 +34,7 @@ COEFS = None                                             # optional list of (a, 
 ROW_BETA = 0                                             # > 0: per-neuron normalization (NorMuon), running average of each row's size
 SPEC = 0                                                 # 0: divide by total size; k > 0: by the largest strength, k power steps
 SAFE = 1.05                                              # with SPEC, divide by SAFE x the estimate (an underestimate would blow up)
+EARLY_N, EARLY_MULT = 0, 1.0                             # Muon lr times EARLY_MULT for the first EARLY_N steps
 
 
 def flatten(G, v=None):
@@ -76,7 +77,7 @@ def optimize(m, g):
                     size = O.norm()
                     O = O / (r / (1 - ROW_BETA ** (step + 1))).sqrt().add(1e-8)
                     O = O * (size / (O.norm() + 1e-12))                         # same total size as before
-                p.add_(O, alpha=-MUON_LR * sched)
+                p.add_(O, alpha=-MUON_LR * sched * (EARLY_MULT if step < EARLY_N else 1.0))
 # --------------------------------------------------------------------- end of OPTIMIZER ----
 
 
