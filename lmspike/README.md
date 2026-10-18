@@ -80,4 +80,24 @@ With the speedrun's embedding/output lr 0.036:
 
 The Adam-to-Muon gap goes from 0.032 to 0.015: about half of Muon's lead in this model is the start, and an Adam schedule can get it.
 
-**Limits.** One tiny model, 1000 steps, 3 seeds (seed-to-seed spread about 0.01-0.02). Every start in section 4 except frozen beats Adam warmup 50 on all 3 seeds; differences under 0.01 between those starts are ties. Adam's lr and warmup were tuned on a coarse grid only. Why frozen hidden layers lose to tiny steps is not explained yet.
+**Limits (sections 1–5).** One tiny model, 1000 steps, 3 seeds (seed-to-seed spread about 0.01-0.02). Every start in section 4 except frozen beats Adam warmup 50 on all 3 seeds; differences under 0.01 between those starts are ties. Adam's lr and warmup were tuned on a coarse grid only. Why frozen hidden layers lose to tiny steps is not explained yet.
+
+## 6. With GELU, Adam no longer kills units and the gap halves
+
+ReLU outputs exactly 0 below zero, so a unit that is never positive gets no gradient and stays dead. GELU leaks a small gradient below zero. If dead units are Adam's problem, GELU should remove most of Adam's loss and leave Muon almost unchanged.
+
+Embedding/output lr 0.01, each optimizer's hidden lr tuned on a grid, 3 seeds (dead shares are 3-seed means), data in [lmact.jsonl](lmact.jsonl):
+
+| | ReLU | GELU |
+|---|---|---|
+| Muon, best lr (ReLU 0.02, GELU 0.03) | **1.649** | **1.627** |
+| Adam lr 0.003, no warmup | 1.740 (47% of layer-2 units dead) | 1.637 (0.1% dead) |
+| Adam, best warmup found | 1.672 (hidden warmup 200, 12% dead) | 1.637 (no warmup is best) |
+| Adam minus Muon | 0.023 | **0.010** |
+
+- **GELU fixes Adam's start by itself.** Plain Adam goes from 1.740 to 1.637. Hidden-layer warmup no longer helps: GELU Adam with warmup 50/100/200 gives 1.642/1.641/1.648.
+- **GELU helps Muon much less** (1.649 → 1.627, 0.022) than plain Adam (0.103). Muon never had dead units to lose.
+- **Muon still wins by 0.010** with GELU. That part of its lead is not about dead units.
+- **Untuned lr can flip the result.** At embedding lr 0.003 with Muon lr 0.02, GELU Adam (1.656) beat Muon (1.668). Muon lr 0.04 gives 1.660 there, and embedding lr 0.01 gives Muon 1.627. Comparing optimizers at one lr per optimizer is not enough.
+
+Other GELU grid points: Adam lr 0.002 / 0.004 with no warmup 1.649 / 1.663; Muon lr 0.02 / 0.04 at embedding lr 0.01 1.644 / 1.650. Leaky ReLU (slope 0.1) at embedding lr 0.003: Muon 1.692, Adam 1.690 to 1.694, untuned.

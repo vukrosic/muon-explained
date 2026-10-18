@@ -11,6 +11,13 @@ import torch
 import torch.nn.functional as F
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "experiments"))
 from train import Net, batch, train, val, CTX, V, ns
+import train as T
+ACT = os.environ.get("ACT", "relu")
+if ACT != "relu":                                          # swap the model's activation; "dead" then means never positive
+    class _F:
+        def __getattr__(s, k): return getattr(F, k)
+        relu = staticmethod(lambda h: F.leaky_relu(h, 0.1) if ACT == "leaky" else F.gelu(h))
+    T.F = _F()
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SEED = int(sys.argv[1])
@@ -39,8 +46,8 @@ rare = torch.zeros(V, dtype=torch.bool); rare[order[cum <= 0.02]] = True
 
 
 def hidden(m, x):
-    z0 = F.relu(m.inp(m.emb(x).flatten(1))); z1 = F.relu(m.h1(z0)); z2 = F.relu(m.h2(z1))
-    return z0, z1, z2
+    a0 = m.inp(m.emb(x).flatten(1)); z0 = T.F.relu(a0); a1 = m.h1(z0); z1 = T.F.relu(a1); a2 = m.h2(z1)
+    return a0, a1, a2
 
 
 def full_val(m):
@@ -104,8 +111,8 @@ with torch.no_grad():
     dead.append([STEPS] + [round(float(((z > 0).sum(0) == 0).float().mean()), 4) for z in hidden(m, probe)])
 # spike: loss more than 1.0 above the median of the previous 50 steps
 spikes = [i for i in range(50, STEPS) if losses[i] > sorted(losses[i - 50:i])[25] + 1.0]
-print(f"{f'warm_hid {WARM_HID} ' if WARM_HID else ''}{'reset ' if RESET2 else ''}{f'lr1 {LR1:g} ' if LR1 else ''}{OPT}{f'(lr {MUON_LR:g})->{OPT2}@{SWITCH}' if SWITCH else ''} warm {WARM} lr {HID_LR:g} clip {CLIP:g} b2 {B2:g} seed {SEED}: val {v:.4f} rare {vr:.4f}  spikes {len(spikes)} {spikes[:6]}"
+print(f"{ACT} {f'warm_hid {WARM_HID} ' if WARM_HID else ''}{'reset ' if RESET2 else ''}{f'lr1 {LR1:g} ' if LR1 else ''}{OPT}{f'(lr {MUON_LR:g})->{OPT2}@{SWITCH}' if SWITCH else ''} warm {WARM} emb {EMB_LR:g} lr {HID_LR:g} clip {CLIP:g} b2 {B2:g} seed {SEED}: val {v:.4f} rare {vr:.4f}  spikes {len(spikes)} {spikes[:6]}"
       f"  gn max {max(gnorms):.1f}  dead end {dead[-1][1:]}", flush=True)
 with open(os.path.join(HERE, OUT), "a") as f:
-    f.write(json.dumps(dict(opt=OPT, switch=SWITCH, opt2=OPT2 if SWITCH else None, warm=WARM, warm2=WARM2, muon_lr=MUON_LR if SWITCH else None, lr1=LR1, reset2=RESET2, warm_hid=WARM_HID, hid_lr=HID_LR, emb_lr=EMB_LR, clip=CLIP, b2=B2, wd=WD, seed=SEED, steps=STEPS, val=round(v, 5),
+    f.write(json.dumps(dict(opt=OPT, act=ACT, switch=SWITCH, opt2=OPT2 if SWITCH else None, warm=WARM, warm2=WARM2, muon_lr=MUON_LR if SWITCH else None, lr1=LR1, reset2=RESET2, warm_hid=WARM_HID, hid_lr=HID_LR, emb_lr=EMB_LR, clip=CLIP, b2=B2, wd=WD, seed=SEED, steps=STEPS, val=round(v, 5),
                             val_rare=round(vr, 5), n_rare_chars=int(rare.sum()), spikes=spikes, loss=losses, gnorm=gnorms, dead=dead)) + "\n")
