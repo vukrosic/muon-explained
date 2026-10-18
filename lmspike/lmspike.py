@@ -41,6 +41,7 @@ MUON_LR = float(os.environ.get("MUON_LR", 0.02))
 EARLY_N = int(os.environ.get("EARLY_N", 0))                # hidden lr times EARLY_MULT for the first EARLY_N steps (any optimizer)
 EARLY_MULT = float(os.environ.get("EARLY_MULT", 1))
 OUTBIAS = os.environ.get("OUTBIAS") == "1"                # 1: output bias starts at log character frequencies (the model starts out predicting the unigram)
+MWD = float(os.environ.get("MWD", 0))                       # Muon weight decay, multiplied by lr (as in the speedrun)
 CAP = float(os.environ.get("CAP", 0))                       # > 0: diagnostic, after every step clip each hidden matrix's singular values to <= CAP (exact SVD)
 
 counts = torch.bincount(train, minlength=V).float()
@@ -113,6 +114,7 @@ for step in range(STEPS):
                     v2.mul_(0.999).add_(p.grad ** 2, alpha=0.001)
                     u = (a1 / (1 - 0.9 ** (step + 1))) / ((v2 / (1 - 0.999 ** (step + 1))).sqrt() + 1e-8)
                     O = u * (O.norm() / (u.norm() + 1e-12))
+                if MWD: p.mul_(1 - MWD * (MUON_LR if SWITCH else HID_LR) * sched * em)
                 p.add_(O, alpha=-(MUON_LR if SWITCH else HID_LR) * sched * em)
     if CAP:
         with torch.no_grad():
@@ -124,8 +126,8 @@ with torch.no_grad():
     dead.append([STEPS] + [round(float(((z > 0).sum(0) == 0).float().mean()), 4) for z in hidden(m, probe)])
 # spike: loss more than 1.0 above the median of the previous 50 steps
 spikes = [i for i in range(50, STEPS) if losses[i] > sorted(losses[i - 50:i])[25] + 1.0]
-print(f"{ACT} {'outbias ' if OUTBIAS else ''}{f'cap {CAP:g} ' if CAP else ''}{f'early {EARLY_N}x{EARLY_MULT:g} ' if EARLY_N else ''}{f'warm_hid {WARM_HID} ' if WARM_HID else ''}{'reset ' if RESET2 else ''}{f'lr1 {LR1:g} ' if LR1 else ''}{OPT}{f'(lr {MUON_LR:g})->{OPT2}@{SWITCH}' if SWITCH else ''} warm {WARM} emb {EMB_LR:g} lr {HID_LR:g} clip {CLIP:g} b2 {B2:g} seed {SEED}: val {v:.4f} rare {vr:.4f}  spikes {len(spikes)} {spikes[:6]}"
+print(f"{ACT} {f'mwd {MWD:g} ' if MWD else ''}{f'wd {WD:g} ' if WD else ''}{f'steps {STEPS} ' if STEPS != 1000 else ''}{'outbias ' if OUTBIAS else ''}{f'cap {CAP:g} ' if CAP else ''}{f'early {EARLY_N}x{EARLY_MULT:g} ' if EARLY_N else ''}{f'warm_hid {WARM_HID} ' if WARM_HID else ''}{'reset ' if RESET2 else ''}{f'lr1 {LR1:g} ' if LR1 else ''}{OPT}{f'(lr {MUON_LR:g})->{OPT2}@{SWITCH}' if SWITCH else ''} warm {WARM} emb {EMB_LR:g} lr {HID_LR:g} clip {CLIP:g} b2 {B2:g} seed {SEED}: val {v:.4f} rare {vr:.4f}  spikes {len(spikes)} {spikes[:6]}"
       f"  gn max {max(gnorms):.1f}  dead end {dead[-1][1:]}", flush=True)
 with open(os.path.join(HERE, OUT), "a") as f:
-    f.write(json.dumps(dict(opt=OPT, act=ACT, switch=SWITCH, opt2=OPT2 if SWITCH else None, warm=WARM, warm2=WARM2, muon_lr=MUON_LR if SWITCH else None, lr1=LR1, reset2=RESET2, warm_hid=WARM_HID, hid_lr=HID_LR, emb_lr=EMB_LR, clip=CLIP, b2=B2, wd=WD, outbias=OUTBIAS, cap=CAP, early_n=EARLY_N, early_mult=EARLY_MULT, seed=SEED, steps=STEPS, val=round(v, 5),
+    f.write(json.dumps(dict(opt=OPT, act=ACT, switch=SWITCH, opt2=OPT2 if SWITCH else None, warm=WARM, warm2=WARM2, muon_lr=MUON_LR if SWITCH else None, lr1=LR1, reset2=RESET2, warm_hid=WARM_HID, hid_lr=HID_LR, emb_lr=EMB_LR, clip=CLIP, b2=B2, wd=WD, mwd=MWD, outbias=OUTBIAS, cap=CAP, early_n=EARLY_N, early_mult=EARLY_MULT, seed=SEED, steps=STEPS, val=round(v, 5),
                             val_rare=round(vr, 5), n_rare_chars=int(rare.sum()), spikes=spikes, loss=losses, gnorm=gnorms, dead=dead, wstat=wstat)) + "\n")

@@ -173,3 +173,23 @@ GELU, embedding lr 0.01, 3 seeds, data in [lmbias.jsonl](lmbias.jsonl):
 - **With ReLU it is not enough.** Adam still leaves 40% of layer 2 dead and ends at 1.716 (from 1.740), Muon 1.648. Adding hidden warmup 100 or 200: 1.669 (6–11% dead), so the ReLU gap stays at 0.021 (0.023 without the bias init).
 
 The bias init is not allowed in the speedrun (only the optimizer may change there).
+
+## 10. Train 3× longer and Muon's lead is gone; with weight decay the two tie
+
+Everything above is 1000 steps. Same model (GELU, embedding lr 0.01), now 3000 steps (lr still decays over the last 85%). Each optimizer's lr, and then its weight decay, was retuned at 3000 steps. Weight decay is multiplied by lr for both (AdamW's `weight_decay`; for Muon `MWD`, as in the speedrun). 3 seeds, data in [lmlong.jsonl](lmlong.jsonl).
+
+| | 1000 steps | 3000 steps |
+|---|---|---|
+| Adam, no weight decay, best lr (1000: 0.003; 3000: 0.0015) | 1.6374 | 1.5073 |
+| Muon, no weight decay, best lr (1000: 0.03; 3000: 0.02) | **1.6272** | 1.5138 |
+| Adam + weight decay, best (1000: lr 0.003, wd 0.15; 3000: lr 0.004, wd 0.3) | 1.6275 | **1.4768** |
+| Muon + weight decay, best (1000: lr 0.04, wd 0.05; 3000: lr 0.035, wd 0.05) | **1.6202** | 1.4789 |
+| Adam minus Muon, with weight decay | +0.007 | −0.002 |
+
+- **Without weight decay the order flips.** At 1000 steps Muon wins by 0.010; at 3000 steps Adam wins by 0.0065, on all 3 seeds (1.5107 / 1.5075 / 1.5037 vs 1.5137 / 1.5196 / 1.5081). The first comparison at 3000 steps, with the 1000-step lrs, made it look larger (1.5265 vs 1.5335); both lrs had to drop.
+- **Weight decay is worth more than the optimizer.** At 3000 steps it gains 0.031 for Adam and 0.035 for Muon. Muon's weight decay window is narrow: 0.025 and 0.05 are good, 0.1 is worse than none (1.517).
+- **With weight decay, 1000 steps: Muon still leads on 3 of 3 seeds** (1.6214 / 1.6204 / 1.6186 vs 1.6380 / 1.6256 / 1.6190), though the last seed by only 0.0004.
+- **With weight decay, 3000 steps: a tie.** Adam is lower on all 3 seeds, by 0.0031, 0.0008 and 0.0024, inside the spread between neighboring settings (Adam lr 0.0025 to 0.004 all give 1.4768 to 1.4775).
+- **The output-bias init from section 9 does not help at 3000 steps** (Adam 1.5238 vs 1.5265, Muon 1.5373 vs 1.5335, both at the old lrs without weight decay).
+
+So in this model Muon's advantage is a faster start, not a better end point. Sections 3, 7 and 8 found the start is where its lead is made; with a 3× budget Adam catches up. Not tested: longer than 3000 steps, wider models, or ReLU at 3000 steps.
