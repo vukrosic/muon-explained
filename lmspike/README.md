@@ -489,3 +489,41 @@ A relabeling only renames characters. Permuting the rows of the embedding and ou
 - **Muon gains as well.** With ReLU, fresh tables take it from 1.826 to 1.747, 0.022 better than 3 rounds + shrink, and later tasks end better than the first. With GELU, from 1.745 to 1.720, as much as 3 rounds gave (1.724).
 - **A fresh embedding alone hurts** (1.875 vs 1.826): with a new embedding feeding the old output layer, the first loss after a change is even higher (7.4) and 47% of layer 3 is dead after 50 steps.
 - **Limit.** This setup is a pure relabeling, where the old output layer is exactly wrong. In real data shifts the old output layer is partly right, and a full reset would throw that away. The general lesson tested here: the damage comes from large, confident errors at the output after a change, and Muon, whose step size does not depend on the gradient's size, suffers less from them than Adam. Likely reason, not measured here: Adam's second-moment average (β2 0.999) lags a sudden jump in the gradient, so for a few dozen steps its update grows up to about 3× (0.1/√0.001); section 18's β2 0.95 and warmup both shorten that window.
+
+## 24. Capping confidence without knowing when a change comes: soft-capping and label smoothing do not replace the reset
+
+Section 23's reset needs to know when a change happens. Two common ways to limit how confident the output can be, with no knowledge of changes, on seed 0 (seed 1 where noted). `SOFTCAP=c`: logits = c·tanh(logits/c) (Gemma 2, modded-nanogpt). `LSMOOTH=s`: label smoothing in the training loss; validation stays plain cross-entropy. Data in [lmshift12.jsonl](lmshift12.jsonl).
+
+| setting | Adam GELU: task 1 | tasks 2–12 | Muon ReLU: task 1 | tasks 2–12 |
+|---|---|---|---|---|
+| plain | 1.791 | 1.922 | 1.764 | 1.826 |
+| soft-cap 3 | 1.905 | 5.219 | 1.881 | 1.922 |
+| soft-cap 5 | 1.795 | 3.310 | 1.777 | 1.801 (seed 1: 1.795) |
+| soft-cap 10 | 1.800 | 1.902 | 1.770 | 1.827 |
+| soft-cap 20 | 1.799 | 1.920 | | |
+| label smoothing 0.1 | 1.842 | 1.894 | 1.806 | 1.810 |
+| label smoothing 0.3 | 2.025 | 2.058 | 1.980 | 1.980 |
+| fresh output layer at each change (section 23) | 1.812 | **1.741** | 1.764 | **1.773** |
+
+- **A small soft-cap destroys Adam over changes.** With cap 3 or 5, tasks 2–12 end above a uniform guess (4.57), and they get worse task after task (cap 5: 4.06 on tasks 7–12). Likely reason, not measured: after a relabeling, the old output layer pushes some wrong logits up to the cap, where tanh is flat and passes almost no gradient, so the model cannot unlearn them. Muon does not collapse with the same cap.
+- **With Muon, cap 5 helps a little.** 0.025 and 0.032 better (seeds 0, 1), and the worst layer-3 deaths drop from 37–39% to 3–11%, but it stays 0.025 behind the reset. Cap 10 changes nothing. Cap 3 costs 0.11 on the first task.
+- **Label smoothing makes later tasks about as good as the first, by making the first one worse.** Muon at 0.1: no rise from task 1 to the later ones (1.806 → 1.810), but task 1 is 0.04 worse than plain. Adam at 0.1 gains 0.03 over plain.
+- None comes within 0.03 of resetting the output layer.
+
+## 25. When the reset pays: only once the old output layer is worse than a uniform guess
+
+In section 23 every character was renamed, so the old output layer was entirely wrong. `SHIFT_FRAC=f` renames only a random share f of the 96 characters among themselves; the rest keep their labels. Seed 0, plain vs a fresh output layer at each change. "Loss at change" is the training loss on the first batch after a change, averaged over the 11 changes; a uniform guess gives ln 96 = 4.56. Data in [lmshift12.jsonl](lmshift12.jsonl).
+
+| characters renamed | Adam GELU: loss at change | plain | fresh output | Muon ReLU: loss at change | plain | fresh output |
+|---|---|---|---|---|---|---|
+| 25% | 3.59 | **1.613** | 1.615 | 3.59 | **1.633** | 1.636 |
+| 50% | 4.62 | 1.725 | **1.677** | 4.69 | **1.681** | 1.703 |
+| 75% | 5.66 | 1.859 | **1.724** | 5.93 | 1.808 | **1.751** |
+| 100% (section 23) | 5.99 | 1.922 | **1.741** | 6.08 | 1.826 | **1.773** |
+
+(tasks 2–12; the 100% plain rows are seed means from sections 17 and 22.)
+
+- **With 25% renamed, the old output layer is mostly right** (loss 3.59, below a uniform guess), nothing breaks down, and a reset throws away what it knew: a tie for both.
+- **Once the old layer is about as bad as a uniform guess, the optimizers part.** At 50%, Adam's gradient grows 2.4× after each change and 31% of layer 3 is dead 50 steps later. The reset gains 0.048. Muon's gradient grows 1.5×, under 2% of layer 3 dies, and the reset costs 0.022.
+- **Above that, the reset pays for both.** At 75%: 0.135 for Adam, 0.057 for Muon.
+- **A rule this suggests, not tested as an automatic method:** reset the output layer only when the loss right after a change is above a uniform guess (ln of the vocabulary size). For Muon the break-even point lies a little higher, between 50% and 75% renamed.
