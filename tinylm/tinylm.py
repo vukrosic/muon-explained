@@ -6,7 +6,7 @@ Accuracy = exact match of the greedy answer on fresh random sequences (= every t
 Arms, all from the same phase-1 model: adam (AdamW on every weight), burst (BURST steps of Muon on the kit's Muon weights, then a
 fresh AdamW), muon (kit's Muon + AdamW throughout).
 
-usage: python3 tinylm.py SEED [ARM ...]      env: P1, P2, LR, LR2, MUON_LR, BURST, WARM, WD, FREQ_NEW, OUT, BSEED, DSEED
+usage: python3 tinylm.py SEED [ARM ...]      env: P1, P1OPT, P2, LR, LR2, MUON_LR, BURST, WARM, WD, FREQ_NEW, OUT, BSEED, DSEED
 SEED sets the init weights. DSEED (default SEED) sets the phase-1 data; BSEED (default DSEED + 100) sets the phase-2 data.
 With DSEED fixed, every run sees exactly the same batches in the same order. LR2 (default LR) is AdamW's lr in phase 2.
 """
@@ -26,6 +26,7 @@ P1, P2, LR, MUON_LR, BURST = E("P1", 1000), E("P2", 1000), E("LR", 0.003), E("MU
 WARM, WD, FREQ_NEW, BS, EVERY = E("WARM", 100), E("WD", 0.2), E("FREQ_NEW", 0.12), 64, 50
 BSEED, DSEED = os.environ.get("BSEED"), os.environ.get("DSEED")
 LR2 = E("LR2", LR)
+P1OPT = os.environ.get("P1OPT", "adam")                     # phase-1 optimizer: adam, or muon (kit's Muon + AdamW split)
 L, A = 6, 10                                                 # letters per sequence, alphabet size
 TASKS = "CSR"; BAR = A + len(TASKS); V = BAR + 1             # tokens: letters 0..9, task tokens, '|'
 T = 2 * L + 2                                                # task, L letters, '|', L answers
@@ -90,7 +91,7 @@ if __name__ == "__main__":
     ds = int(DSEED) if DSEED else seed
     torch.manual_seed(seed); g = torch.Generator().manual_seed(ds)
     t = time.time(); m1 = MinimalLLM(CFG); log1 = []
-    train(m1, P1, "CS", [0.5, 0.5], g, "adam", log1, 0, torch.Generator().manual_seed(999))
+    train(m1, P1, "CS", [0.5, 0.5], g, P1OPT, log1, 0, torch.Generator().manual_seed(999))
     print(f"seed {seed} phase 1 {time.time() - t:.1f}s  {log1[-1]}", flush=True)
     new = ["CSR", [(1 - FREQ_NEW) / 2, (1 - FREQ_NEW) / 2, FREQ_NEW]]
     for arm in arms:
@@ -104,5 +105,5 @@ if __name__ == "__main__":
             train(m, P2, *new, g2, arm, log, 0, eg, LR2)
         print(f"seed {seed} {arm:>6} {time.time() - t:.1f}s  {log[-1]}", flush=True)
         with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), os.environ.get("OUT", "runs.jsonl")), "a") as f:
-            f.write(json.dumps(dict(seed=seed, dseed=ds, bseed=bs, arm=arm, p1=P1, p2=P2, lr=LR, lr2=LR2, muon_lr=MUON_LR, burst=BURST, warm=WARM, wd=WD,
+            f.write(json.dumps(dict(seed=seed, p1opt=P1OPT, dseed=ds, bseed=bs, arm=arm, p1=P1, p2=P2, lr=LR, lr2=LR2, muon_lr=MUON_LR, burst=BURST, warm=WARM, wd=WD,
                                     freq_new=FREQ_NEW, phase1=log1[-1], log1=log1, log=log)) + "\n")
