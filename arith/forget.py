@@ -44,7 +44,7 @@ WARM = int(os.environ.get("WARM", 0))
 KICK, KICK_LR = int(os.environ.get("KICK", 0)), float(os.environ.get("KICK_LR", 1))   # OPT=adam: every KICK-th step is one Muon step
 DIAG_OP = int(os.environ.get("DIAG", -1)); DIAG = DIAG_OP >= 0
 ADD_AT = tuple(map(int, os.environ["ADD_AT"].split(":"))) if os.environ.get("ADD_AT") else None
-log = []
+log, gstats = [], []
 for step in range(STEPS2 + 1):
     if step % A.EVERY == 0 or step in (10, 20, 30):
         log.append(dict(step=step, train=[round(A.acc(m, r), 4) for r in full_tr], test=[round(A.acc(m, r), 4) for r in te]))
@@ -63,8 +63,8 @@ for step in range(STEPS2 + 1):
     x = torch.cat([tr[i][torch.randint(len(tr[i]), (int((k == i).sum()),), generator=gen)] for i in range(len(tr))])
     loss = F.cross_entropy(m(x[:, :3]), x[:, 3])
     m.zero_grad(); loss.backward()
-    if CLIP:
-        torch.nn.utils.clip_grad_norm_(m.parameters(), CLIP)
+    gnorm = torch.nn.utils.clip_grad_norm_(m.parameters(), CLIP if CLIP else float("inf")).item()
+    gstats.append(gnorm)
     sched = min(1.0, (1 - step / STEPS2) / A.DECAY) if DECAYING else 1.0
     if WARM:
         sched *= min(1.0, (step + 1) / WARM)
@@ -91,4 +91,5 @@ if os.environ.get("SAVE2"):
     torch.save(dict(model=m.state_dict(), tr=full_tr, te=te, order=order, seed=seed), os.environ["SAVE2"])
 with open(os.path.join(A.HERE, os.environ.get("FOUT", "forget.jsonl")), "a") as f:
     f.write(json.dumps(dict(model=os.path.basename(path), label=label, order=order, seed=seed, opt=A.OPT, freq2=FREQ2, steps2=STEPS2,
-                            lr_mult=LR_MULT, sched="decay" if DECAYING else "const", wd=A.WD, limit=os.environ.get("LIMIT"), bseed=int(os.environ.get("BSEED", 0)), sp=os.environ.get("SP"), reset=os.environ.get("RESET"), add_at=os.environ.get("ADD_AT"), warm=WARM, kick=KICK, kick_lr=KICK_LR, b2=B2, eps=EPS, clip=CLIP, log=log)) + "\n")
+                            lr_mult=LR_MULT, sched="decay" if DECAYING else "const", wd=A.WD, limit=os.environ.get("LIMIT"), bseed=int(os.environ.get("BSEED", 0)), sp=os.environ.get("SP"), reset=os.environ.get("RESET"), add_at=os.environ.get("ADD_AT"), warm=WARM, kick=KICK, kick_lr=KICK_LR, b2=B2, eps=EPS, clip=CLIP, n_clipped=sum(g > CLIP for g in gstats) if CLIP else None,
+                            gnorm_pct=[round(sorted(gstats)[int(q * (len(gstats) - 1))], 3) for q in (0.5, 0.9, 0.99, 1.0)], log=log)) + "\n")

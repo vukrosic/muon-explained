@@ -386,7 +386,7 @@ Fresh Adam runs (all four ops from step 0) fail on × about 1 time in 4. [kick.j
 | init 3, order 0 | yes, 13.6 | 1363 | 0.77 | 0.15 |
 | 4 successful runs (s1, s2, init 4, init 6) | none | — | 0.00–0.01 | 0.73–0.92 |
 
-**Clip the gradient norm at 1 (`CLIP=1`) and the failures disappear.** Normal steps have a total gradient norm well under 1, so only spike steps are touched.
+**Clip the gradient norm at 1 (`CLIP=1`) and the failures disappear.** Without clipping, the total gradient norm has a median of 0.21, a 99th percentile of 2.4 and a maximum of 65 (s1, order 1). With clipping it is cut on 13–15% of steps (1161 and 1392 of 9000 in two runs), so clipping also shapes ordinary late-training steps, not only spikes.
 
 | 12 fresh runs | runs with × below 0.3 | mean × held-out | mean ÷ held-out | runs where over 30% of h1 switches off |
 |---|---|---|---|---|
