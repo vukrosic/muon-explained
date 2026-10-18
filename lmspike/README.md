@@ -462,3 +462,30 @@ Sections 17–21 used GELU. The speedrun model uses ReLU, whose units can die ou
 - **The two add up.** 3 rounds + shrink: 1.769 on tasks 2–12, no worse than the first task (1.773), with at most 4% of any layer dead. That is 0.057 better than plain Muon, on both seeds (1.767 vs 1.827, 1.771 vs 1.825).
 - **Leaky ReLU removes most of the loss but not all** (1.789). Its "dead" units (never positive, still passing 0.1 of the signal) move to layer 1. So dying is a large part of ReLU's loss, though not all of it.
 - **GELU still ends best** (1.745 with 2 rounds, 1.724 with 3), but its task 1 is no better. For a network that will be retrained on new data, the activation matters more than for one trained once.
+
+## 23. The real cause: the old output table. Resetting it at each change fixes Adam and Muon
+
+A relabeling only renames characters. Permuting the rows of the embedding and output tables would give back task 1's exact loss without touching the hidden layers. So how much do the hidden layers have to change, and what damages them? `OPT2=frozen SWITCH=500` stops all hidden updates after task 1; `EMB_RESET` puts the embedding (`emb`), the output layer (`out`) or both (`1`) back to a fresh random init with fresh AdamW state at every change. Same 12-task setup. Data in [lmshift12.jsonl](lmshift12.jsonl).
+
+| model | setting | seeds | task 1 | tasks 2–12 | tasks 7–12 |
+|---|---|---|---|---|---|
+| Muon, ReLU, record lrs | plain (section 22) | 2 | 1.764 | 1.826 | 1.833 |
+| | hidden frozen after task 1 | 2 | 1.764 | 2.295 | 2.318 |
+| | hidden frozen + fresh tables | 2 | 1.764 | 2.153 | 2.154 |
+| | fresh embedding only | 1 | 1.769 | 1.875 | 1.885 |
+| | fresh output layer only | 2 | 1.764 | 1.773 | 1.780 |
+| | **fresh embedding + output** | 2 | 1.764 | **1.747** | **1.748** |
+| | 3 rounds + shrink (section 22) | 2 | 1.773 | 1.769 | 1.772 |
+| Muon, GELU, lr 0.04 | plain (section 21) | 4 | 1.763 | 1.745 | 1.749 |
+| | **fresh embedding + output** | 2 | 1.763 | **1.720** | **1.718** |
+| Adam, GELU | plain (section 17) | 3 | 1.791 | 1.922 | 1.937 |
+| | warmup + β2 0.95 + shrink (section 18) | 4 | | | 1.760 |
+| | fresh embedding + output | 2 | 1.798 | 1.751 | 1.755 |
+| | **fresh output layer only** | 1 | 1.812 | **1.741** | **1.743** |
+
+- **The hidden layers must keep learning.** Frozen after task 1, later tasks reach only 2.30 (2.15 with fresh tables), against 1.77 when they train. 500 steps are not enough for the tables alone to find the renaming.
+- **But the old output layer damages them.** At a change, the old output layer predicts the old characters with confidence. The loss at the first step after a change is 6.0, well above the 4.57 of a uniform guess (fresh output layer). The gradient over the next 25 steps grows 1.7× for Muon and 6.3× for Adam, and within 50 steps 26% (Muon ReLU) and 80% (Adam) of the last layer's units are dead. With a fresh output layer the gradient barely rises (1.04× and 1.4×), and the deaths drop to 11% and 0.3%.
+- **Adam's breakdown from sections 17–19 is almost all this.** A fresh output layer alone takes Adam from 1.922 to 1.741 on tasks 2–12, better than all three fixes of section 18 together (1.760 on tasks 7–12, vs 1.743), and as good as Muon with GELU (1.745). The gap between Adam and Muon over changes was mainly how each survives the old output layer's huge first gradients, not a lasting difference in plasticity.
+- **Muon gains as well.** With ReLU, fresh tables take it from 1.826 to 1.747, 0.022 better than 3 rounds + shrink, and later tasks end better than the first. With GELU, from 1.745 to 1.720, as much as 3 rounds gave (1.724).
+- **A fresh embedding alone hurts** (1.875 vs 1.826): with a new embedding feeding the old output layer, the first loss after a change is even higher (7.4) and 47% of layer 3 is dead after 50 steps.
+- **Limit.** This setup is a pure relabeling, where the old output layer is exactly wrong. In real data shifts the old output layer is partly right, and a full reset would throw that away. The general lesson tested here: the damage comes from large, confident errors at the output after a change, and an optimizer that bounds its step (Muon) suffers less from them than one that adapts to the gradient size (Adam).
