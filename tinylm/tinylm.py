@@ -6,7 +6,8 @@ Accuracy = exact match of the greedy answer on fresh random sequences (= every t
 Arms, all from the same phase-1 model: adam (AdamW on every weight), burst (BURST steps of Muon on the kit's Muon weights, then a
 fresh AdamW), muon (kit's Muon + AdamW throughout).
 
-usage: python3 tinylm.py SEED [ARM ...]      env: P1, P2, LR, MUON_LR, BURST, WARM, WD, FREQ_NEW, OUT
+usage: python3 tinylm.py SEED [ARM ...]      env: P1, P2, LR, MUON_LR, BURST, WARM, WD, FREQ_NEW, OUT, BSEED
+SEED sets the init and phase-1 data; BSEED (default SEED + 100) sets the phase-2 batches.
 """
 import copy, json, os, sys, time
 import torch, torch.nn.functional as F
@@ -22,6 +23,7 @@ torch.set_num_threads(int(os.environ.get("THREADS", 1)))
 E = lambda k, d: type(d)(os.environ.get(k, d))
 P1, P2, LR, MUON_LR, BURST = E("P1", 1000), E("P2", 1000), E("LR", 0.003), E("MUON_LR", 0.024), E("BURST", 100)
 WARM, WD, FREQ_NEW, BS, EVERY = E("WARM", 100), E("WD", 0.2), E("FREQ_NEW", 0.12), 64, 50
+BSEED = os.environ.get("BSEED")
 L, A = 6, 10                                                 # letters per sequence, alphabet size
 TASKS = "CSR"; BAR = A + len(TASKS); V = BAR + 1             # tokens: letters 0..9, task tokens, '|'
 T = 2 * L + 2                                                # task, L letters, '|', L answers
@@ -49,8 +51,11 @@ def evaluate(m, g):
     hooks = [b.feed_forward.up_proj.register_forward_hook(lambda mod, i, o: pre.append(o)) for b in m.transformer_blocks]
     for t in TASKS:
         s = batch(256, t, g); pre.clear()
-        out[t] = round((answer_logits(m, s).argmax(-1) == s[:, L + 2:]).all(1).float().mean().item(), 3)
-        if t == "R":                                         # feed-forward units with pre-activation <= 0 on every R answer position
+        hit = answer_logits(m, s).argmax(-1) == s[:, L + 2:]
+        out[t] = round(hit.all(1).float().mean().item(), 3)
+        if t == "R":                                         # per answer position: share of letters right
+            out["Rpos"] = [round(v, 3) for v in hit.float().mean(0).tolist()]
+            # feed-forward units with pre-activation <= 0 on every R answer position
             out["off"] = round(sum((p[:, L + 1:].amax((0, 1)) <= 0).float().mean().item() for p in pre) / len(pre), 3)
     for h in hooks: h.remove()
     return out
@@ -63,17 +68,19 @@ def train(m, steps, tasks, freqs, g, opt, log, t0, eg):
         opts, base = [adamw], [LR]
     else:
         opts, base = [muon_opt, adamw], [MUON_LR, LR]
+    losses = []
     for i in range(steps):
-        if i % EVERY == 0: log.append(dict(step=t0 + i, **evaluate(m, eg)))
+        if i % EVERY == 0:
+            log.append(dict(step=t0 + i, loss=round(sum(losses) / len(losses), 4) if losses else None, **evaluate(m, eg))); losses = []
         sc = min(1, 2 * (1 - i / steps)) * (min(1, (i + 1) / WARM) if opt == "adam" and WARM else 1)
         loss = F.cross_entropy(answer_logits(m, s := mixed(BS, tasks, freqs, g)).reshape(-1, V), s[:, L + 2:].reshape(-1))
         for o in opts: o.zero_grad()
-        loss.backward()
+        loss.backward(); losses.append(loss.item())
         torch.nn.utils.clip_grad_norm_(m.parameters(), CFG.grad_clip)
         for o, lr in zip(opts, base):
             for gr in o.param_groups: gr["lr"] = lr * sc
             o.step()
-    log.append(dict(step=t0 + steps, **evaluate(m, eg)))
+    log.append(dict(step=t0 + steps, loss=round(sum(losses) / len(losses), 4) if losses else None, **evaluate(m, eg)))
 
 
 if __name__ == "__main__":
@@ -84,7 +91,9 @@ if __name__ == "__main__":
     print(f"seed {seed} phase 1 {time.time() - t:.1f}s  {log1[-1]}", flush=True)
     new = ["CSR", [(1 - FREQ_NEW) / 2, (1 - FREQ_NEW) / 2, FREQ_NEW]]
     for arm in arms:
-        t = time.time(); m = copy.deepcopy(m1); g2 = torch.Generator().manual_seed(seed + 100); eg = torch.Generator().manual_seed(999); log = []
+        t = time.time(); m = copy.deepcopy(m1)
+        bs = int(BSEED) if BSEED else seed + 100
+        g2 = torch.Generator().manual_seed(bs); eg = torch.Generator().manual_seed(999); log = []
         if arm == "burst":
             train(m, BURST, *new, g2, "muon", log, 0, eg); log.pop()
             train(m, P2, *new, g2, "adam", log, BURST, eg)
@@ -92,5 +101,5 @@ if __name__ == "__main__":
             train(m, P2, *new, g2, arm, log, 0, eg)
         print(f"seed {seed} {arm:>6} {time.time() - t:.1f}s  {log[-1]}", flush=True)
         with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), os.environ.get("OUT", "runs.jsonl")), "a") as f:
-            f.write(json.dumps(dict(seed=seed, arm=arm, p1=P1, p2=P2, lr=LR, muon_lr=MUON_LR, burst=BURST, warm=WARM, wd=WD,
+            f.write(json.dumps(dict(seed=seed, bseed=bs, arm=arm, p1=P1, p2=P2, lr=LR, muon_lr=MUON_LR, burst=BURST, warm=WARM, wd=WD,
                                     freq_new=FREQ_NEW, phase1=log1[-1], log=log)) + "\n")
