@@ -441,3 +441,24 @@ If the even spread of section 20 is what protects Muon, then fewer Newton–Schu
 - **This does not contradict the speedrun**, where 2 rounds beat 5 on one 1000-step task: there, each round count used its own raw step size, and 5 rounds took larger steps on weak directions. Here the sizes are matched. The speedrun's [weak-direction test](../speedrun/README.md#does-muon-push-weak-directions-too-hard) found a slightly uneven update (S^0.25) best on a single task. With repeated changes, the even update wins.
 - **On one fresh 1000-step task it helps too, at these settings.** GELU, lr 0.04, no changes, 5 seeds: 3 rounds 1.6128, 2 rounds 1.6209, better on all 5 seeds (by 0.001–0.012); 5 rounds 1.6173. With ReLU at the same lrs, 3 rounds beat 2 on 4 of 4 seeds by 0.005–0.011. But at the speedrun's tuned record settings (ReLU, Muon lr 0.02, AdamW lr 0.036) it is a tie over 5 seeds ([speedrun](../speedrun/README.md#three-rounds-at-the-size-of-two)). Data in [lmrounds.jsonl](lmrounds.jsonl).
 - **Consistency check.** 0 rounds and section 20's `nsgd` at lr 0.04 compute the same update along different code paths. They agree on tasks 7–12 (1.901 vs 1.909), though not bit for bit: after 500 steps the two runs match exactly, but by step 6000 seed 0 differs by 0.03 (1.904 vs 1.936). Runs that are breaking down are that sensitive to rounding.
+
+## 22. With ReLU, Muon also loses ground over changes; 3 rounds plus a shrink stop it
+
+Sections 17–21 used GELU. The speedrun model uses ReLU, whose units can die outright. Same 12-task setup, the speedrun's record settings (ReLU, Muon lr 0.02, weight decay 0.05, AdamW lr 0.036 on the embedding and output), 2 seeds each. "Shrink" multiplies the hidden matrices by 0.7 at every change (section 19). Deaths are the worst share over the run, per layer, counted from the input. Data in [lmshift12.jsonl](lmshift12.jsonl).
+
+| setting | task 1 (fresh) | tasks 2–12 | tasks 7–12 | dead, worst: layer 1 / 2 / 3 |
+|---|---|---|---|---|
+| 2 rounds | 1.764 | 1.826 | 1.833 | 7% / 1% / 39% |
+| 2 rounds, Muon lr 0.04, AdamW 0.01 | 1.779 | 1.829 | 1.831 | 7% / 6% / 36% |
+| 3 rounds | 1.773 | 1.805 | 1.813 | 0% / 0% / 44% |
+| 2 rounds + shrink 0.7 | 1.764 | 1.783 | 1.788 | 0% / 7% / 12% |
+| **3 rounds + shrink 0.7** | 1.773 | **1.769** | **1.772** | 0% / 0% / 4% |
+| leaky ReLU (slope 0.1), 2 rounds | 1.768 | 1.789 | 1.801 | 33% / 1% / 5% |
+| GELU, 2 rounds, lr 0.04 (section 21) | 1.763 | 1.745 | 1.749 | 11% layer 2 |
+
+- **With ReLU, Muon is not flat.** Tasks 2–12 are 0.06 worse than the fresh first task on both seeds, at both learning-rate settings. With GELU, later tasks are 0.02 better than the first. Up to 39% of the last layer's units go dead during a task. At the end of each run, 8% are still dead.
+- **3 rounds help here too, and at the record's settings.** 0.021 and 0.020 better on tasks 2–12 (seeds 0, 1), although on a fresh 1000-step task they tie with 2 rounds at these settings ([speedrun](../speedrun/README.md#three-rounds-at-the-size-of-two)). They keep layers 1 and 2 at 0% dead, but not layer 3.
+- **The shrink reaches layer 3.** It cuts the worst layer-3 deaths from 39% to 12% and tasks 2–12 by 0.043.
+- **The two add up.** 3 rounds + shrink: 1.769 on tasks 2–12, no worse than the first task (1.773), with at most 4% of any layer dead. That is 0.057 better than plain Muon, on both seeds (1.767 vs 1.827, 1.771 vs 1.825).
+- **Leaky ReLU removes most of the loss but not all** (1.789). Its "dead" units (never positive, still passing 0.1 of the signal) move to layer 1. So dying is a large part of ReLU's loss, though not all of it.
+- **GELU still ends best** (1.745 with 2 rounds, 1.724 with 3), but its task 1 is no better. For a network that will be retrained on new data, the activation matters more than for one trained once.
