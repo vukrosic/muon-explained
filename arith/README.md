@@ -386,13 +386,14 @@ Fresh Adam runs (all four ops from step 0) fail on × about 1 time in 4. [kick.j
 | init 3, order 0 | yes, 13.6 | 1363 | 0.77 | 0.15 |
 | 4 successful runs (s1, s2, init 4, init 6) | none | — | 0.00–0.01 | 0.73–0.92 |
 
-**Clip the gradient norm at 1 (`CLIP=1`) and the failures disappear.** Without clipping, the total gradient norm has a median of 0.21, a 99th percentile of 2.4 and a maximum of 65 (s1, order 1). With clipping it is cut on 13–15% of steps (1161 and 1392 of 9000 in two runs), so clipping also shapes ordinary late-training steps, not only spikes.
+**Clip the gradient norm at 1 (`CLIP=1`) and the failures disappear.** Without clipping, the total gradient norm has a median of 0.21, a 99th percentile of 2.4 and a maximum of 65 (s1, order 1). With clipping it is cut on 13–15% of steps (1161 and 1392 of 9000 in two runs), so clipping also shapes ordinary late-training steps, not only spikes. Clipping at 3 touches only 0–75 steps per run (under 1%) and works almost as well (table below), so capping the rare spike steps is what matters. The spikes still happen (largest norms 3–58), but they are capped before Adam's step.
 
 | 12 fresh runs | runs with × below 0.3 | mean × held-out | mean ÷ held-out | runs where over 30% of h1 switches off |
 |---|---|---|---|---|
 | Adam | 3 | 0.64 | 0.46 | 3 |
 | Adam, beta2 0.95 | 1 | 0.72 | 0.39 | 3 |
 | **Adam, clip at 1** | **0** | **0.86** | **0.64** | **0** |
+| **Adam, clip at 3** (cuts 0–75 of 9000 steps) | **0** | **0.83** | **0.59** | **0** |
 
 All three failing runs are rescued (0.15 → 0.87, 0.14 → 0.74, 0.03 → 0.63), and the rarest op ÷ (3% of batches) improves too. Lowering beta2 to 0.95 rescues them only partly and makes ÷ worse.
 
