@@ -101,3 +101,31 @@ Embedding/output lr 0.01, each optimizer's hidden lr tuned on a grid, 3 seeds (d
 - **Untuned lr can flip the result.** At embedding lr 0.003 with Muon lr 0.02, GELU Adam (1.656) beat Muon (1.668). Muon lr 0.04 gives 1.660 there, and embedding lr 0.01 gives Muon 1.627. Comparing optimizers at one lr per optimizer is not enough.
 
 Other GELU grid points: Adam lr 0.002 / 0.004 with no warmup 1.649 / 1.663; Muon lr 0.02 / 0.04 at embedding lr 0.01 1.644 / 1.650. Leaky ReLU (slope 0.1) at embedding lr 0.003: Muon 1.692, Adam 1.690 to 1.694, untuned.
+
+## 7. With GELU, Muon's lead is lost in Adam's first 10 steps
+
+With no dead units left, what is the remaining 0.010? Same setup as section 6 (GELU, embedding lr 0.01, Muon lr 0.03, Adam lr 0.003), 3 seeds, data in [lmgswitch.jsonl](lmgswitch.jsonl) and [lmgstat.jsonl](lmgstat.jsonl), chart from [plot_gelu.py](plot_gelu.py).
+
+![stable rank and switch curve](../images/lm_gelu.png)
+
+| first hidden steps | then | validation loss |
+|---|---|---|
+| – | Muon all the way | **1.627** |
+| 1 Adam step | Muon | 1.629 |
+| 3 Adam steps | Muon | 1.629 |
+| 10 Adam steps | Muon | 1.636 |
+| 25 Adam steps | Muon | 1.637 |
+| 100 Adam steps | Muon | 1.638 |
+| – | Adam all the way | 1.637 |
+| 10 Adam steps at 1/30 of the lr | Muon | 1.630 |
+| 10 Muon steps at 30× the lr | Muon | 1.661 |
+
+- **Ten Adam steps at the start cost 90% of Muon's lead**, and 900 Muon steps afterwards do not win it back. Worse than Muon on all 3 seeds (by 0.012, 0.009, 0.006).
+- **It is the size of those steps, not their direction.** The same 10 Adam directions at 1/30 of the lr keep the lead (better than full-size on all 3 seeds). Muon's own directions at 30× the lr for 10 steps are worse than Adam all the way.
+- **Why Adam's first step is so big** ([first_step.py](first_step.py)). The first gradient of each hidden matrix is nearly rank 1: 84–94% of its energy is in one direction. Adam's first update is lr × sign(gradient), and the sign of a rank-1 matrix is again rank 1 with every entry ±1, so its strength in that one direction is 512 × 0.003 ≈ 1.0–1.2. The whole starting matrix has top strength 1.15. Muon's first update has strength 0.036 (2 Newton–Schulz rounds leave a near-rank-1 input small).
+- **What it does to the weights.** After 10 Adam steps the last hidden matrix's stable rank (how many directions carry its size) drops from 131 to 10. Muon keeps 123 at step 10 and still 27 at the end; Adam ends at 7. Switching to Muon after the 10 steps lifts it only to 19 by step 300.
+- **Muon's directions still matter after the start.** Muon's step size each step with Adam's direction (best of lr 0.015/0.03/0.06/0.12) gives 1.653; with the raw gradient's direction 1.644. Both lose to Muon on all 3 seeds.
+- **Late Adam costs less.** 25 / 100 / 500 Muon steps, then Adam: 1.637 / 1.633 / 1.629.
+- **Capping the strengths does not fix it.** Clipping every hidden matrix's strengths to at most 3 after each step (exact SVD) makes both worse: Adam 1.646, Muon 1.645 (seed 0).
+
+**Reading.** In this model Muon's early updates are small because the early gradient is close to rank 1, which works like a warmup that ends by itself when the gradient spreads. A run that takes a few full-size steps early gets stuck in a lower-rank state. An Adam warmup does not reproduce this (warmup 50/100/200 gives 1.642/1.641/1.648), likely because Adam's later directions are also worse. Untested: whether the same holds in a larger model or a longer run.

@@ -38,6 +38,9 @@ WARM2 = int(os.environ.get("WARM2", 0))                   # lr warmup over WARM2
 LR1 = float(os.environ.get("LR1", 0))                     # > 0 with OPT=adam OPT2=adam: constant hidden lr before the switch
 RESET2 = os.environ.get("RESET2") == "1"                  # 1: fresh Adam state for the hidden matrices at the switch
 MUON_LR = float(os.environ.get("MUON_LR", 0.02))
+EARLY_N = int(os.environ.get("EARLY_N", 0))                # hidden lr times EARLY_MULT for the first EARLY_N steps (any optimizer)
+EARLY_MULT = float(os.environ.get("EARLY_MULT", 1))
+CAP = float(os.environ.get("CAP", 0))                       # > 0: diagnostic, after every step clip each hidden matrix's singular values to <= CAP (exact SVD)
 
 counts = torch.bincount(train, minlength=V).float()
 order = counts.argsort()
@@ -70,7 +73,7 @@ adam = torch.optim.AdamW([m.emb.weight, m.out.weight, m.out.bias], lr=EMB_LR, we
 hopt = torch.optim.AdamW(hid, lr=HID_LR, weight_decay=WD, betas=(0.9, B2))
 mom = [torch.zeros_like(p) for p in hid]
 m1 = [torch.zeros_like(p) for p in hid]; sq = [torch.zeros_like(p) for p in hid]   # Adam moments for the adamshape start
-losses, gnorms, dead = [], [], []
+losses, gnorms, dead, wstat = [], [], [], []   # wstat: [step, (Frobenius norm, top singular value) per hidden matrix]
 for step in range(STEPS):
     sched = min(1.0, (1 - step / STEPS) / DECAY) * (min(1.0, (step + 1) / WARM) if WARM else 1.0)
     if SWITCH and WARM2 and step >= SWITCH:
@@ -78,6 +81,7 @@ for step in range(STEPS):
     if step % 25 == 0 or step < 25:
         with torch.no_grad():
             dead.append([step] + [round(float(((z > 0).sum(0) == 0).float().mean()), 4) for z in hidden(m, probe)])
+            wstat.append([step] + [[round(p.norm().item(), 3), round(torch.linalg.matrix_norm(p, 2).item(), 3)] for p in hid])
     x, y = batch(train, g)
     loss = F.cross_entropy(m(x), y)
     m.zero_grad(); loss.backward()
@@ -86,11 +90,12 @@ for step in range(STEPS):
     for gr in adam.param_groups: gr["lr"] = EMB_LR * sched
     adam.step()
     cur = OPT2 if SWITCH and step >= SWITCH else OPT
+    em = EARLY_MULT if step < EARLY_N else 1.0
     if SWITCH and RESET2 and step == SWITCH:
         hopt = torch.optim.AdamW(hid, lr=HID_LR, weight_decay=WD, betas=(0.9, B2))
     if cur == "adam":
         hs = sched * (min(1.0, (step + 1) / WARM_HID) if WARM_HID else 1.0)
-        for gr in hopt.param_groups: gr["lr"] = LR1 if (LR1 and SWITCH and step < SWITCH) else HID_LR * hs
+        for gr in hopt.param_groups: gr["lr"] = LR1 if (LR1 and SWITCH and step < SWITCH) else HID_LR * hs * em
         hopt.step()
     elif cur != "frozen":                     # frozen: hidden matrices not updated at all
         with torch.no_grad():
@@ -105,14 +110,19 @@ for step in range(STEPS):
                     v2.mul_(0.999).add_(p.grad ** 2, alpha=0.001)
                     u = (a1 / (1 - 0.9 ** (step + 1))) / ((v2 / (1 - 0.999 ** (step + 1))).sqrt() + 1e-8)
                     O = u * (O.norm() / (u.norm() + 1e-12))
-                p.add_(O, alpha=-(MUON_LR if SWITCH else HID_LR) * sched)
+                p.add_(O, alpha=-(MUON_LR if SWITCH else HID_LR) * sched * em)
+    if CAP:
+        with torch.no_grad():
+            for p in hid:
+                U, S, Vh = torch.linalg.svd(p, full_matrices=False)
+                if S[0] > CAP: p.copy_((U * S.clamp_max(CAP)) @ Vh)
 v, vr = full_val(m)
 with torch.no_grad():
     dead.append([STEPS] + [round(float(((z > 0).sum(0) == 0).float().mean()), 4) for z in hidden(m, probe)])
 # spike: loss more than 1.0 above the median of the previous 50 steps
 spikes = [i for i in range(50, STEPS) if losses[i] > sorted(losses[i - 50:i])[25] + 1.0]
-print(f"{ACT} {f'warm_hid {WARM_HID} ' if WARM_HID else ''}{'reset ' if RESET2 else ''}{f'lr1 {LR1:g} ' if LR1 else ''}{OPT}{f'(lr {MUON_LR:g})->{OPT2}@{SWITCH}' if SWITCH else ''} warm {WARM} emb {EMB_LR:g} lr {HID_LR:g} clip {CLIP:g} b2 {B2:g} seed {SEED}: val {v:.4f} rare {vr:.4f}  spikes {len(spikes)} {spikes[:6]}"
+print(f"{ACT} {f'cap {CAP:g} ' if CAP else ''}{f'early {EARLY_N}x{EARLY_MULT:g} ' if EARLY_N else ''}{f'warm_hid {WARM_HID} ' if WARM_HID else ''}{'reset ' if RESET2 else ''}{f'lr1 {LR1:g} ' if LR1 else ''}{OPT}{f'(lr {MUON_LR:g})->{OPT2}@{SWITCH}' if SWITCH else ''} warm {WARM} emb {EMB_LR:g} lr {HID_LR:g} clip {CLIP:g} b2 {B2:g} seed {SEED}: val {v:.4f} rare {vr:.4f}  spikes {len(spikes)} {spikes[:6]}"
       f"  gn max {max(gnorms):.1f}  dead end {dead[-1][1:]}", flush=True)
 with open(os.path.join(HERE, OUT), "a") as f:
-    f.write(json.dumps(dict(opt=OPT, act=ACT, switch=SWITCH, opt2=OPT2 if SWITCH else None, warm=WARM, warm2=WARM2, muon_lr=MUON_LR if SWITCH else None, lr1=LR1, reset2=RESET2, warm_hid=WARM_HID, hid_lr=HID_LR, emb_lr=EMB_LR, clip=CLIP, b2=B2, wd=WD, seed=SEED, steps=STEPS, val=round(v, 5),
-                            val_rare=round(vr, 5), n_rare_chars=int(rare.sum()), spikes=spikes, loss=losses, gnorm=gnorms, dead=dead)) + "\n")
+    f.write(json.dumps(dict(opt=OPT, act=ACT, switch=SWITCH, opt2=OPT2 if SWITCH else None, warm=WARM, warm2=WARM2, muon_lr=MUON_LR if SWITCH else None, lr1=LR1, reset2=RESET2, warm_hid=WARM_HID, hid_lr=HID_LR, emb_lr=EMB_LR, clip=CLIP, b2=B2, wd=WD, cap=CAP, early_n=EARLY_N, early_mult=EARLY_MULT, seed=SEED, steps=STEPS, val=round(v, 5),
+                            val_rare=round(vr, 5), n_rare_chars=int(rare.sum()), spikes=spikes, loss=losses, gnorm=gnorms, dead=dead, wstat=wstat)) + "\n")
