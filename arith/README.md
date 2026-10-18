@@ -414,3 +414,77 @@ Clipping does not remove the whole effect. At step 3000, h1's effective rank has
 **What this suggests beyond this toy (untested):** a single loss spike can permanently remove capacity that only rare or later data would have used. The final loss on the common data recovers within about 60 steps, so the damage does not show up there.
 
 **In the character model** the same Adam unit death happens, but in the first 50 steps instead of at a mid-training spike, and Muon cannot revive those units. Details: [lmspike](../lmspike/README.md).
+
+## Continual learning: one op at a time, then all again
+
+**Question.** Train one task at a time. Does Muon or Adam (a) keep learning new tasks, (b) forget old ones less, (c) relearn faster on a second visit? And what changes when the "new task" is an adversarial change?
+
+**Setup** ([cl.py](cl.py)). Same model and data split as above (mod 97, half of each op's pairs held out). Each phase trains only one task for 2000 steps, at a constant learning rate with optimizer state kept. Accuracy is logged on every task every 100 steps. Muon here uses 5 Newton–Schulz rounds instead of the exact SVD. Each optimizer gets the setting that learns + alone fastest ([cl_cal.jsonl](cl_cal.jsonl), steps to 90% held-out):
+
+- Adam: hidden lr 0.001, weight decay 3, 1000 steps. With weight decay 0.05 or 0.3 it memorizes in 500 steps and never generalizes in 8000.
+- Muon: lr 0.02, weight decay 0.5, 750 steps.
+
+Two sequences:
+
+- **ops:** + − × ÷ + − × ÷ (each op once, then all again);
+- **relabel (adversarial):** +, then + with every answer renamed by a random permutation, three different renamings, then the original and the first renaming again. Same inputs, new answers.
+
+Results in [cl.jsonl](cl.jsonl) (4 seeds for ops, 2 for relabel), [cl_fix.jsonl](cl_fix.jsonl), [cl_fine.jsonl](cl_fine.jsonl).
+
+### Ops sequence (seeds 0–3)
+
+Held-out accuracy at the end of each phase on the op being trained ("—": below 0.9 at the end):
+
+| | phases learned (≥ 0.9) | × first visit | × second visit | h1 units dead at the end |
+|---|---|---|---|---|
+| Adam s0 | 7/8 | 0.22 | 0.99 | 0.98 |
+| Adam s1 | **4/8** | 0.96 | 0.02 | 0.75 |
+| Adam s2 | 7/8 | 0.67 | 0.99 | 0.97 |
+| Adam s3 | 7/8 | 0.47 | 1.00 | 0.95 |
+| Muon s0–s3 | **8/8 in all 4** | 0.97–0.98 | 0.98–0.99 | 0.00 |
+
+Steps to 90% held-out within a phase, first visit → second visit:
+
+| op | Adam | Muon |
+|---|---|---|
+| + | 1000–1600 → 400–500 (s1: never) | 700–900 → **300** |
+| × | 1700 in 1 seed, never in 3 → 800–1000 (s1: never) | 1300–1600 → **300** |
+| − (right after +) | 100 → 100–200 | 200 → 100 |
+| ÷ (right after ×) | 100–1100 → 100–200 | 200 → 100 |
+
+**What it means.**
+
+- **Both forget everything, at once.** Every op is at 0.01–0.04 held-out by the end of the next phase, under both optimizers, in all 56 op changes. At 10-step resolution, the old op is below 0.5 after the first 10 steps of the next task, for both (Muon below 0.1 after 20 steps, Adam after 10). Without replay, neither optimizer protects old knowledge here.
+- **Muon keeps learning, Adam does not always.** Muon learns 32 of 32 phases and keeps all h1 units alive. Adam reaches 0.9 on × in its first visit in 1 of 4 seeds: it memorizes the training pairs but does not find the rule. Seed 1 stops learning anything after phase 4 (all ops at 0.01), with 75–87% of h1 units dead. This is the same unit death as in the [late-op test above](#can-a-trained-model-learn-a-new-op-adam-no-muon-yes), now across a sequence: 78–97% of h1 is dead after × in the three seeds that fail it, and 32% in the seed that learns it.
+- **The second visit is faster for both.** Forgetting removed the answers, not everything. Muon relearns × 4–5× faster (300 steps instead of 1300–1600). Adam learns × on the second visit in 3 of 4 seeds, in 800–1000 steps, although it failed it on the first visit.
+- **Related ops come almost free.** − right after + and ÷ right after × take 100–200 steps under both. ÷ is × by the inverse ([how the model does it](#how-the-model-does-it)).
+
+### Relabel sequence (seeds 0, 1)
+
+| | phases learned | steps to 90% per new renaming | h1 units dead at the end |
+|---|---|---|---|
+| Adam | 6/6 | 200–300 | 0.75–0.98 (rising each phase) |
+| Muon | 6/6 | 100–200 | 0.03–0.04 |
+
+- **Adam does not break here, unlike in the character model.** Only the answers are renamed. The rule computed inside (a + b) stays the same, so only the output layer has to change, and Adam's few surviving units are enough. In the character model ([lmspike sections 16–23](../lmspike/README.md)), the renaming also changes the inputs.
+- Every renaming is below 0.5 at the first check (100 steps) into the next one, under both.
+
+### Do replay or clipping fix Adam? (ops sequence, seeds 0, 1)
+
+`REPLAY=0.1`: 10% of each batch comes from earlier tasks. `CLIP=1`: gradient norm clipped at 1 (it fixed the spike failures above).
+
+| | × first visit | × second visit | old +/− and old × at the very end (after the last ÷ phase) |
+|---|---|---|---|
+| Adam | 0.22, 0.96 | 0.99, 0.02 | ≤ 0.04 |
+| Adam, clip 1 | 0.03, 0.03 | 0.11, 1.00 | ≤ 0.03 |
+| Adam, replay 10% | 0.04, 0.03 | 1.00, 0.06 | **0.91–0.93, 0.79–0.99** |
+| Adam, replay 10% + clip 1 | 0.03, 0.04 | 0.21, 0.90 | 0.84–0.96, 0.34–1.00 |
+| Muon | 0.97, 0.98 | 0.98, 0.99 | ≤ 0.04 |
+| Muon, replay 10% | 0.94, 0.95 | 0.99, 0.98 | **0.49–0.57, 0.80–0.90** |
+
+- **Clipping does not fix Adam here.** Adam fails × on the first visit in 7 of 8 runs across all four Adam variants; Muon fails it in 0 of 4. This failure is not a spike; × arrives after + and − are solved and the units it needs are already off.
+- **Replay keeps old ops, and Adam keeps more of them.** With 10% replay alone, Adam ends with old ops at 0.79–0.99, Muon at 0.49–0.90. Muon also needs 1900 steps for × with replay, against 1300–1600 without. This matches the earlier finding that [Muon forgets a removed op 2–10× faster](#does-the-partner-protect-an-op-from-being-forgotten): Muon's full-size update with lr-scaled weight decay moves every direction every step, including the ones that hold old ops.
+
+**In one line:** Muon keeps the ability to learn new tasks (plasticity), Adam keeps old tasks better when they are still shown a little (retention). Without replay, both forget within 10–20 steps.
+
+**Limits.** One tiny model, one task family, 2–4 seeds, one setting per optimizer chosen on + alone. Phases are 2000 steps at a constant lr; a schedule restarted per phase was not tested (the [swap test](#is-it-the-trained-network-or-the-optimizer-that-follows-swap-them) showed warmup matters for Adam). Earlier claims stand: the "Muon forgets faster" result above also holds with replay here.
