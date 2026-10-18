@@ -6,8 +6,9 @@ Accuracy = exact match of the greedy answer on fresh random sequences (= every t
 Arms, all from the same phase-1 model: adam (AdamW on every weight), burst (BURST steps of Muon on the kit's Muon weights, then a
 fresh AdamW), muon (kit's Muon + AdamW throughout).
 
-usage: python3 tinylm.py SEED [ARM ...]      env: P1, P2, LR, MUON_LR, BURST, WARM, WD, FREQ_NEW, OUT, BSEED
-SEED sets the init and phase-1 data; BSEED (default SEED + 100) sets the phase-2 batches.
+usage: python3 tinylm.py SEED [ARM ...]      env: P1, P2, LR, LR2, MUON_LR, BURST, WARM, WD, FREQ_NEW, OUT, BSEED, DSEED
+SEED sets the init weights. DSEED (default SEED) sets the phase-1 data; BSEED (default DSEED + 100) sets the phase-2 data.
+With DSEED fixed, every run sees exactly the same batches in the same order. LR2 (default LR) is AdamW's lr in phase 2.
 """
 import copy, json, os, sys, time
 import torch, torch.nn.functional as F
@@ -23,7 +24,8 @@ torch.set_num_threads(int(os.environ.get("THREADS", 1)))
 E = lambda k, d: type(d)(os.environ.get(k, d))
 P1, P2, LR, MUON_LR, BURST = E("P1", 1000), E("P2", 1000), E("LR", 0.003), E("MUON_LR", 0.024), E("BURST", 100)
 WARM, WD, FREQ_NEW, BS, EVERY = E("WARM", 100), E("WD", 0.2), E("FREQ_NEW", 0.12), 64, 50
-BSEED = os.environ.get("BSEED")
+BSEED, DSEED = os.environ.get("BSEED"), os.environ.get("DSEED")
+LR2 = E("LR2", LR)
 L, A = 6, 10                                                 # letters per sequence, alphabet size
 TASKS = "CSR"; BAR = A + len(TASKS); V = BAR + 1             # tokens: letters 0..9, task tokens, '|'
 T = 2 * L + 2                                                # task, L letters, '|', L answers
@@ -61,11 +63,11 @@ def evaluate(m, g):
     return out
 
 
-def train(m, steps, tasks, freqs, g, opt, log, t0, eg):
+def train(m, steps, tasks, freqs, g, opt, log, t0, eg, lr_adam=LR):
     muon_opt, adamw = setup_muon_optimizer(m, CFG)          # kit's split: 2-D non-embedding weights -> Muon, rest -> AdamW
     if opt == "adam":                                        # AdamW on every weight, the kit's AdamW settings
-        adamw = torch.optim.AdamW(list(m.parameters()), lr=LR, weight_decay=WD)
-        opts, base = [adamw], [LR]
+        adamw = torch.optim.AdamW(list(m.parameters()), lr=lr_adam, weight_decay=WD)
+        opts, base = [adamw], [lr_adam]
     else:
         opts, base = [muon_opt, adamw], [MUON_LR, LR]
     losses = []
@@ -85,21 +87,22 @@ def train(m, steps, tasks, freqs, g, opt, log, t0, eg):
 
 if __name__ == "__main__":
     seed, arms = int(sys.argv[1]), sys.argv[2:] or ["adam", "burst", "muon"]
-    torch.manual_seed(seed); g = torch.Generator().manual_seed(seed)
+    ds = int(DSEED) if DSEED else seed
+    torch.manual_seed(seed); g = torch.Generator().manual_seed(ds)
     t = time.time(); m1 = MinimalLLM(CFG); log1 = []
     train(m1, P1, "CS", [0.5, 0.5], g, "adam", log1, 0, torch.Generator().manual_seed(999))
     print(f"seed {seed} phase 1 {time.time() - t:.1f}s  {log1[-1]}", flush=True)
     new = ["CSR", [(1 - FREQ_NEW) / 2, (1 - FREQ_NEW) / 2, FREQ_NEW]]
     for arm in arms:
         t = time.time(); m = copy.deepcopy(m1)
-        bs = int(BSEED) if BSEED else seed + 100
+        bs = int(BSEED) if BSEED else ds + 100
         g2 = torch.Generator().manual_seed(bs); eg = torch.Generator().manual_seed(999); log = []
         if arm == "burst":
             train(m, BURST, *new, g2, "muon", log, 0, eg); log.pop()
-            train(m, P2, *new, g2, "adam", log, BURST, eg)
+            train(m, P2, *new, g2, "adam", log, BURST, eg, LR2)
         else:
-            train(m, P2, *new, g2, arm, log, 0, eg)
+            train(m, P2, *new, g2, arm, log, 0, eg, LR2)
         print(f"seed {seed} {arm:>6} {time.time() - t:.1f}s  {log[-1]}", flush=True)
         with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), os.environ.get("OUT", "runs.jsonl")), "a") as f:
-            f.write(json.dumps(dict(seed=seed, bseed=bs, arm=arm, p1=P1, p2=P2, lr=LR, muon_lr=MUON_LR, burst=BURST, warm=WARM, wd=WD,
-                                    freq_new=FREQ_NEW, phase1=log1[-1], log=log)) + "\n")
+            f.write(json.dumps(dict(seed=seed, dseed=ds, bseed=bs, arm=arm, p1=P1, p2=P2, lr=LR, lr2=LR2, muon_lr=MUON_LR, burst=BURST, warm=WARM, wd=WD,
+                                    freq_new=FREQ_NEW, phase1=log1[-1], log1=log1, log=log)) + "\n")
