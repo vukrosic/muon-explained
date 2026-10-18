@@ -250,3 +250,19 @@ Hidden width 512 → 1024 (`HID=1024`), GELU, 1000 steps, weight decay on both, 
 | Muon lr 0.06, init 2 / 4 | 1.5958 / 1.5923 | 1.6040 / 1.5978 | |
 
 Both halves matter: init 2 beats init 4 with every batch order, and data 2 beats data 4 with every init. The 1.5801 run is the good init paired with the good batch order, 0.017 below the next-best mixed run. Across seeds, a higher stable rank of the first hidden matrix at step 24 goes with a lower final loss (correlation −0.95 over the 6 seeds; 15 for the best run, 10 for the two worst), but that is a correlation over 6 runs, not a tested cause.
+
+## 14. Muon's 1000-step lead is worth about 50 Adam steps
+
+The loss falls fast with longer training, so a lead in loss can be read as a number of steps. Width 512, GELU, weight decay on both, lr near each one's best at every length (Adam lr 0.003 wd 0.3, its best lr at 3000 steps gives the same loss within 0.0007; Muon lr 0.04 up to 1000 steps, 0.035 after). Each run is a full run of that length with its own lr decay, 3 seeds, data in [lmsteps.jsonl](lmsteps.jsonl) and [lmlong.jsonl](lmlong.jsonl).
+
+| steps | Adam | Muon | Adam minus Muon |
+|---|---|---|---|
+| 750 | | 1.6702 | |
+| 1000 | 1.6282 | 1.6202 | +0.008 |
+| 1250 | 1.5882 | | |
+| 1500 | 1.5598 | | |
+| 2000 | 1.5179 | 1.5194 | −0.0015 |
+| 3000 | 1.4768 | 1.4789 | −0.002 |
+
+- From 1000 to 1250 steps Adam drops 0.040, so Muon's 0.008 lead at 1000 steps is what Adam gains in about 50 more steps: **Muon saves about 5% of the steps at 1000, and none from 2000 on.**
+- The gap from 750 to 1000 steps (0.05 for Muon) is six times the Muon–Adam gap at 1000. Every section above that compares the two at 1000 steps is measuring a difference smaller than 60 training steps.
