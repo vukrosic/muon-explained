@@ -266,3 +266,19 @@ The loss falls fast with longer training, so a lead in loss can be read as a num
 
 - From 1000 to 1250 steps Adam drops 0.040, so Muon's 0.008 lead at 1000 steps is what Adam gains in about 50 more steps: **Muon saves about 5% of the steps at 1000, and none from 2000 on.**
 - The gap from 750 to 1000 steps (0.05 for Muon) is six times the Muon–Adam gap at 1000. The GELU differences in sections 6–9 (at most 0.010) each amount to about 60 Adam steps or fewer. The ReLU gaps (0.02–0.07) are larger because dead units are permanent (sections 1, 2, 11).
+
+## 15. Muon's lead depends on the number of steps, not the batch size
+
+Same data seen (512,000 predictions), split two ways: batch 512 × 1000 steps, or batch 2048 × 250 steps (`BATCH=2048 STEPS=250`). Plus a control: batch 512 × 250 steps, which has the larger batch's step count but a quarter of the data. Width 512, GELU, weight decay on both. lr, embedding lr, Adam's β2 and Adam's hidden-layer warmup retuned for each setting (144 runs, 3 seeds each, in [lmbatch.jsonl](lmbatch.jsonl)).
+
+| setting | best Muon | best Adam | Muon | Adam | Adam minus Muon, per seed | mean |
+|---|---|---|---|---|---|---|
+| batch 512 × 1000 steps | lr 0.04, emb 0.01 | lr 0.003, emb 0.01, wd 0.15 | 1.6202 | 1.6275 | +0.017 / +0.005 / +0.000 | **+0.007** |
+| batch 2048 × 250 steps | lr 0.08, emb 0.03 | lr 0.01, emb 0.03, warmup 50, β2 0.95, wd 0.3 | 1.6614 | 1.6798 | +0.028 / +0.016 / +0.011 | **+0.018** |
+| batch 512 × 250 steps | lr 0.06, emb 0.03 | lr 0.005, emb 0.03, warmup 25, wd 0.15 | 1.9276 | 1.9421 | +0.006 / +0.023 / +0.014 | **+0.015** |
+
+- **At 250 steps, Muon leads by about the same at both batch sizes** (0.015 and 0.018), but at the same data it leads by 0.007 at 1000 steps. The lead follows the number of steps. A larger batch helps Muon only because it means fewer steps.
+- **The 4× batch wastes data for both.** At the same data, batch 2048 ends 0.041 above batch 512 for Muon and 0.052 above for Adam.
+- **Fewer steps need larger lrs and a hot embedding.** Muon's best lr doubles at 250 steps (0.04 → 0.06–0.08). The embedding and output lr triples (0.01 → 0.03) for both; at 1000 steps 0.02 is worse than 0.01 for both (Muon 1.6240, Adam 1.6330).
+- **Adam needs a hidden-layer warmup at batch 2048.** Without one, every lr from 0.003 to 0.006 ends at 1.81–1.86 (lr 0.006 spikes on seed 0). 50 warmup steps bring it to 1.70, and β2 0.95 and embedding lr 0.03 to 1.68. Muon needs no warmup at any setting. Over the 144 runs, untuned Adam loses by up to 0.19; tuned Adam loses by 0.018.
+- **Limits.** One model, 3 seeds per setting. Seed spread at 250 steps is about 0.01, so the 0.015 and 0.018 leads are clear, but the two are not separable.
