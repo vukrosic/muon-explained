@@ -355,3 +355,59 @@ Same task (add × at 12% to a model trained on + and −), 2 seeds × 2 batch or
 - **Adam switches healthy units off in under 100 steps** when it restarts at full learning rate with empty moment estimates. The × loss starts high (7.9–8.4: confident wrong answers) and the quickest way down is to silence × inputs (loss ≈ ln 97 = 4.57). With warmup the first 100 steps keep every unit on.
 - **The share of units off at step 1000 predicts the result:** runs with 70–95% off end at 0.02–0.03; runs with 14–60% off learn × (0.54–0.91).
 - **A practical recipe from this:** before adding new data to an Adam-trained model, run a few hundred Muon steps, then continue with Adam using a warmup. Here it lifts × from 0.02–0.03 to 0.24–0.38, still below a fresh model (0.43–0.91). Untested beyond this toy.
+
+**How long must the Muon burst be?** ([swap.jsonl](swap.jsonl), Adam-trained model → N Muon steps → Adam 9000 steps with 500-step warmup, 4 runs each)
+
+| Muon steps | 10 | 100 | 500 | 2000 |
+|---|---|---|---|---|
+| × held-out | 0.06–0.17 | 0.29–0.32 | 0.24–0.38 | 0.29–0.40 |
+
+10 Muon steps already switch 99% of the dead units back on, but × needs about 100. After 100 steps, a longer burst adds nothing. With 18,000 Adam steps instead of 9000, the 100-step rescue reaches 0.52–0.53 in 4 of 4 runs, and × train is 1.00. The same model with no burst stays at 0.02–0.03. A fresh model at 18,000 steps gets 0.03, 0.61, 0.86, 0.96.
+
+**One Muon step every N Adam steps** ([kick.jsonl](kick.jsonl), `KICK=N`): on the Adam-trained model, × reaches 0.04–0.32, which is worse than a single 100-step burst. On a fresh model it is not clearly better than plain Adam (12 runs each, mean × 0.72 vs 0.64, within seed spread).
+
+## Why a fresh Adam run sometimes never learns ×: a loss spike switches off two thirds of the units
+
+Fresh Adam runs (all four ops from step 0) fail on × about 1 time in 4. [kick.jsonl](kick.jsonl) and [spike.jsonl](spike.jsonl) have 12 runs per setting: 6 starting weights × 2 batch orders. [collapse_probe.py](collapse_probe.py) replays a run exactly and logs every step ([spike_probe.json](spike_probe.json)).
+
+![spike](../images/arith_spike.png)
+
+**What happens in a failing run** (init s1, batch order 1):
+- By step 1480, + and − are solved (loss 0.01–0.02) and × is still at chance.
+- The gradient on h1 slowly grows from 0.2 to 0.5. At step 1487 it jumps to 9.4, then to 40.6 at step 1488, and the batch loss goes from 0.6 to 17.
+- Within 20 steps, 71% of h1's units are off on every × input and 64% on every + input. + and − recover in about 60 steps using the remaining units. × never does: its train accuracy stays at 0.03 for the rest of the run.
+
+**Every failure has a spike, and no success does:**
+
+| run | loss spike above 3 after step 600 | step of the spike | h1 units off on × afterwards | × at the end |
+|---|---|---|---|---|
+| s1, order 1 | yes, 17.2 | 1488 | 0.93 | 0.03 |
+| init 5, order 0 | yes, 21.9 | 1305 | 0.78 | 0.14 |
+| init 3, order 0 | yes, 13.6 | 1363 | 0.77 | 0.15 |
+| 4 successful runs (s1, s2, init 4, init 6) | none | — | 0.00–0.01 | 0.73–0.92 |
+
+**Clip the gradient norm at 1 (`CLIP=1`) and the failures disappear.** Normal steps have a total gradient norm well under 1, so only spike steps are touched.
+
+| 12 fresh runs | runs with × below 0.3 | mean × held-out | mean ÷ held-out | runs where over 30% of h1 switches off |
+|---|---|---|---|---|
+| Adam | 3 | 0.64 | 0.46 | 3 |
+| Adam, beta2 0.95 | 1 | 0.72 | 0.39 | 3 |
+| **Adam, clip at 1** | **0** | **0.86** | **0.64** | **0** |
+
+All three failing runs are rescued (0.15 → 0.87, 0.14 → 0.74, 0.03 → 0.63), and the rarest op ÷ (3% of batches) improves too. Lowering beta2 to 0.95 rescues them only partly and makes ÷ worse.
+
+**The late-op critical period is also mostly spikes.** In the earlier critical-period runs, the h1 units off on × went from about 0.1 at step 2500 to 0.82–0.95 by step 3000 in 6 of 8 runs. With clipping, 0.06–0.32 are off at step 3000 ([critical_clip.jsonl](critical_clip.jsonl), 8 runs per row):
+
+| × enters at step | runs that learn ×, no clipping | with clip at 1 |
+|---|---|---|
+| 1000 | 3/8 | 6/8 |
+| 3000 | 0/8 | 2/8 (0.42, 0.58) |
+
+Clipping does not remove the whole effect. At step 3000, h1's effective rank has still fallen to 62–105 (about 170 at step 1000). Weight decay 0.1 instead of 1 keeps the rank at 185–192, but then the model memorizes × (train 1.00) and never generalizes it (held-out 0.02, 16 runs).
+
+**Why it fits the Muon results:**
+- Muon's update has a fixed size whatever the gradient, so a gradient jump of 80× cannot turn into an 8× larger step. Muon-trained models had 0% of h1 off.
+- Adam's step is the gradient divided by its recent average size. Here the gradient had been small for hundreds of steps, so when it suddenly grows, Adam's step grows with it. In this run, the update on h1 went from 0.13 to 1.31 in 3 steps.
+- Gradient clipping caps that step.
+
+**What this suggests beyond this toy (untested):** a single loss spike can permanently remove capacity that only rare or later data would have used. The final loss on the common data recovers within about 60 steps, so the damage does not show up there.

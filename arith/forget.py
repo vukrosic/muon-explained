@@ -4,7 +4,7 @@ Does an op survive when its partner is still trained?
 Same optimizers as arith.py, fresh optimizer state, constant learning rate = LR_MULT x the peak, weight decay WD.
 Usage: FREQ2=0.48,0.48,0,0.04 OPT=adam python3 forget.py MODEL.pt LABEL   -> forget.jsonl
 SAVE2=path keeps the result for a later relearn run. LIMIT=i:K trains op i on only its first K training pairs (relearning).
-FOUT names the jsonl. WARM=W: learning rate rises linearly from 0 over the first W steps. DIAG=i logs h1 effective rank and dead units on op i. ADD_AT=i:D keeps op i out of the batch until step D. RESET=emb,out,hid puts those parts back to a fresh init first. SP=lam,sig: shrink and perturb first, W = lam W + sig W_fresh on the 3 hidden matrices. SCHED=decay: lr as in arith.py (full for half the steps, then linear to 0) instead of constant.
+FOUT names the jsonl. WARM=W: learning rate rises linearly from 0 over the first W steps. DIAG=i logs h1 effective rank and dead units on op i. ADD_AT=i:D keeps op i out of the batch until step D. RESET=emb,out,hid puts those parts back to a fresh init first. SP=lam,sig: shrink and perturb first, W = lam W + sig W_fresh on the 3 hidden matrices. KICK=K (OPT=adam): every K-th step the hidden matrices take one Muon step (lr MUON_LR x KICK_LR) instead of Adam. B2, EPS: Adam beta2 and eps (all Adam groups). CLIP=c: clip the total gradient norm to c. SCHED=decay: lr as in arith.py (full for half the steps, then linear to 0) instead of constant.
 """
 import json, os, sys
 import torch, torch.nn.functional as F
@@ -34,12 +34,14 @@ if os.environ.get("LIMIT"):
     i_lim, k_lim = map(int, os.environ["LIMIT"].split(":"))
     tr = [t[:k_lim] if i == i_lim else t for i, t in enumerate(tr)]
 muon = [m.inp.weight, m.h1.weight, m.h2.weight]
-adam = torch.optim.AdamW([m.emb.weight, m.out.weight, m.out.bias], lr=A.ADAM_LR * LR_MULT, weight_decay=0)
-hid = torch.optim.AdamW(muon, lr=A.HID_LR * LR_MULT, weight_decay=A.WD) if A.OPT == "adam" else None
+B2, EPS, CLIP = float(os.environ.get("B2", 0.999)), float(os.environ.get("EPS", 1e-8)), float(os.environ.get("CLIP", 0))
+adam = torch.optim.AdamW([m.emb.weight, m.out.weight, m.out.bias], lr=A.ADAM_LR * LR_MULT, weight_decay=0, betas=(0.9, B2), eps=EPS)
+hid = torch.optim.AdamW(muon, lr=A.HID_LR * LR_MULT, weight_decay=A.WD, betas=(0.9, B2), eps=EPS) if A.OPT == "adam" else None
 mom = [torch.zeros_like(w) for w in muon]
 freq = torch.tensor(FREQ2)
 DECAYING = os.environ.get("SCHED") == "decay"
 WARM = int(os.environ.get("WARM", 0))
+KICK, KICK_LR = int(os.environ.get("KICK", 0)), float(os.environ.get("KICK_LR", 1))   # OPT=adam: every KICK-th step is one Muon step
 DIAG_OP = int(os.environ.get("DIAG", -1)); DIAG = DIAG_OP >= 0
 ADD_AT = tuple(map(int, os.environ["ADD_AT"].split(":"))) if os.environ.get("ADD_AT") else None
 log = []
@@ -61,16 +63,23 @@ for step in range(STEPS2 + 1):
     x = torch.cat([tr[i][torch.randint(len(tr[i]), (int((k == i).sum()),), generator=gen)] for i in range(len(tr))])
     loss = F.cross_entropy(m(x[:, :3]), x[:, 3])
     m.zero_grad(); loss.backward()
+    if CLIP:
+        torch.nn.utils.clip_grad_norm_(m.parameters(), CLIP)
     sched = min(1.0, (1 - step / STEPS2) / A.DECAY) if DECAYING else 1.0
     if WARM:
         sched *= min(1.0, (step + 1) / WARM)
     for gr in adam.param_groups:
         gr["lr"] = A.ADAM_LR * LR_MULT * sched
     adam.step()
-    if hid:
+    if hid and not (KICK and step % KICK == KICK - 1):
         for gr in hid.param_groups:
             gr["lr"] = A.HID_LR * LR_MULT * sched
         hid.step(); continue
+    if hid:                                           # Muon kick: this step the hidden matrices get one Muon update (no momentum)
+        with torch.no_grad():
+            for w in muon:
+                w.add_(A.shaped(w.grad, 0), alpha=-A.MUON_LR * KICK_LR * sched)
+        continue
     with torch.no_grad():
         for w, buf in zip(muon, mom):
             buf.mul_(A.BETA).add_(w.grad)
@@ -82,4 +91,4 @@ if os.environ.get("SAVE2"):
     torch.save(dict(model=m.state_dict(), tr=full_tr, te=te, order=order, seed=seed), os.environ["SAVE2"])
 with open(os.path.join(A.HERE, os.environ.get("FOUT", "forget.jsonl")), "a") as f:
     f.write(json.dumps(dict(model=os.path.basename(path), label=label, order=order, seed=seed, opt=A.OPT, freq2=FREQ2, steps2=STEPS2,
-                            lr_mult=LR_MULT, sched="decay" if DECAYING else "const", wd=A.WD, limit=os.environ.get("LIMIT"), bseed=int(os.environ.get("BSEED", 0)), sp=os.environ.get("SP"), reset=os.environ.get("RESET"), add_at=os.environ.get("ADD_AT"), warm=WARM, log=log)) + "\n")
+                            lr_mult=LR_MULT, sched="decay" if DECAYING else "const", wd=A.WD, limit=os.environ.get("LIMIT"), bseed=int(os.environ.get("BSEED", 0)), sp=os.environ.get("SP"), reset=os.environ.get("RESET"), add_at=os.environ.get("ADD_AT"), warm=WARM, kick=KICK, kick_lr=KICK_LR, b2=B2, eps=EPS, clip=CLIP, log=log)) + "\n")
