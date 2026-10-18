@@ -402,3 +402,23 @@ Why does shrinking the weights at each change work, when warmup and β2 0.95 alo
 - **With the shrink, the same burst still happens** (7–9% of layer 3 dead 25 steps after the change), **but it is gone by step 200**, so nothing carries over. One likely reason, not tested here: multiplying all three matrices by 0.7 shrinks layer 3's inputs as well as its weights, so every unit's input moves toward zero, where GELU passes gradient again.
 
 **Muon has a slow version of the same ratchet, and it does not matter.** Muon (3 seeds, no shrink) collects up to 8–11% dead in layer 2 from task 4 on, never any in layer 3. With ×0.7 or ×0.85 at each change (2 seeds each) layer 2 stays at most 4% dead, but the loss does not move: tasks 7–12 average 1.751 (×0.7) and 1.746 (×0.85) against 1.748 without. Muon's dead units cost nothing measurable, and the drift in section 17 (1.741 → 1.748) does not come from them.
+
+## 20. Muon's step size alone does not protect it; the shape does
+
+Section 16 blamed Adam's trouble at a change on its step size: the second-moment estimate still holds the small end-of-task gradients, so the first steps after the change come out about 10× too large. Muon's step has a fixed size, whatever the gradient. Is that the whole reason Muon survives 12 changes?
+
+Test: keep Muon's step size exactly (every step, the update is rescaled to the Frobenius norm of Muon's 2-round output on that step), but give it another shape. `adamshape` uses Adam's update direction (β 0.9, 0.999); `nsgd` uses the momentum gradient itself. Momentum, Nesterov, weight decay 0.05 and the schedule are Muon's. Same 12-task setup as section 17, 3 learning rates, 2 seeds each. Data in [lmshift12.jsonl](lmshift12.jsonl).
+
+| update, all with Muon's step size | lr | task 1 | tasks 2–6 | tasks 7–12 | layer 2 dead, end of task 12 (worst seed) |
+|---|---|---|---|---|---|
+| Muon (orthogonalized) | 0.04 | **1.762** | **1.741** | **1.748** | 9% |
+| Adam's shape | 0.02 | 1.929 | 1.809 | 1.825 | 46% |
+| Adam's shape | 0.04 | 1.820 | 1.832 | 1.889 | 73% |
+| Adam's shape | 0.07 | 1.784 | 1.875 | 1.939 | 82% |
+| gradient's shape | 0.02 | 1.884 | 1.830 | 1.916 | 62% |
+| gradient's shape | 0.04 | 1.800 | 1.847 | 1.909 | 46% |
+| gradient's shape | 0.07 | 1.812 | 1.934 | 2.070 | 83% |
+
+- **With the same step size, both other shapes break down the way Adam does.** Layer 2 deaths pile up from change to change in every run (adamshape lr 0.04: 36% after the first change, 73% by task 12), and tasks 7–12 are 0.08–0.32 worse than Muon.
+- **There is no learning rate that fixes it.** A higher lr helps the first task and hurts later ones. A lower lr does the reverse. None comes within 0.07 of Muon on tasks 7–12.
+- **So the fixed size is not enough.** What keeps Muon's units alive is that Newton–Schulz spreads the update evenly over all directions of the matrix. One likely reason, not tested here: an update dominated by a few directions pushes many units' inputs the same way at once, and after a change those few directions point at the new task's largest error.
