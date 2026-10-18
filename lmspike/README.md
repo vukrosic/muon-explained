@@ -265,4 +265,4 @@ The loss falls fast with longer training, so a lead in loss can be read as a num
 | 3000 | 1.4768 | 1.4789 | −0.002 |
 
 - From 1000 to 1250 steps Adam drops 0.040, so Muon's 0.008 lead at 1000 steps is what Adam gains in about 50 more steps: **Muon saves about 5% of the steps at 1000, and none from 2000 on.**
-- The gap from 750 to 1000 steps (0.05 for Muon) is six times the Muon–Adam gap at 1000. Every section above that compares the two at 1000 steps is measuring a difference smaller than 60 training steps.
+- The gap from 750 to 1000 steps (0.05 for Muon) is six times the Muon–Adam gap at 1000. The GELU differences in sections 6–9 (at most 0.010) each amount to about 60 Adam steps or fewer. The ReLU gaps (0.02–0.07) are larger because dead units are permanent (sections 1, 2, 11).
