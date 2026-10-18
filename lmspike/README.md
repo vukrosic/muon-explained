@@ -422,3 +422,21 @@ Test: keep Muon's step size exactly (every step, the update is rescaled to the F
 - **With the same step size, both other shapes break down the way Adam does.** Layer 2 deaths pile up from change to change in every run (adamshape lr 0.04: 36% after the first change, 73% by task 12), and tasks 7–12 are 0.08–0.32 worse than Muon.
 - **There is no learning rate that fixes it.** A higher lr helps the first task and hurts later ones. A lower lr does the reverse. None comes within 0.07 of Muon on tasks 7–12.
 - **So the fixed size is not enough.** What keeps Muon's units alive is that Newton–Schulz spreads the update evenly over all directions of the matrix. One likely reason, not tested here: an update dominated by a few directions pushes many units' inputs the same way at once, and after a change those few directions point at the new task's largest error.
+
+## 21. More Newton–Schulz rounds: more even updates, fewer deaths, lower loss after changes
+
+If the even spread of section 20 is what protects Muon, then fewer Newton–Schulz rounds (a less even update) should break down more, and more rounds should hold up better. Test (`ROUNDS=k`): every step, the k-round output is rescaled to the size of the standard 2-round output, so only the shape changes, never the step size. 0 rounds is the momentum gradient itself, the same update as section 20's gradient shape. Same 12-task setup, Muon lr 0.04, weight decay 0.05. Data in [lmshift12.jsonl](lmshift12.jsonl).
+
+| rounds (step size of 2 rounds) | seeds | task 1 (fresh) | tasks 2–12 | tasks 7–12 | layer 2 dead, worst task and seed |
+|---|---|---|---|---|---|
+| 0 | 2 | 1.800 | 1.878 | 1.901 | 65% |
+| 1 | 2 | 1.793 | 1.854 | 1.871 | 62% |
+| 2 (standard) | 4 | 1.763 | 1.745 | 1.749 | 11% |
+| 3 | 4 | **1.753** | **1.724** | **1.726** | 1% |
+| 5 | 3 | 1.773 | 1.726 | 1.728 | 0% |
+
+- **The loss falls with every added round up to 3, and deaths fall with it.** 0 and 1 rounds break down like Adam: 13% of layer 2 dead after the first change, then 43–65%. 2 rounds collect up to 11%. 3 and 5 rounds keep layer 2 at 0–1% for all 12 tasks.
+- **3 rounds beat 2 on all 4 seeds**, by 0.020, 0.023, 0.025 and 0.020 on tasks 2–12. That is twice the seed spread, and it costs one more round (about 50% more optimizer compute).
+- **The gain grows after changes.** On the fresh first task, 3 rounds are 0.010 better than 2, and 5 rounds are 0.010 worse. After the changes, both are 0.02 better than 2 rounds. A fully even update matters more when the network has to relearn than when it learns from scratch.
+- **This does not contradict the speedrun**, where 2 rounds beat 5 on one 1000-step task: there, each round count used its own raw step size, and 5 rounds took larger steps on weak directions. Here the sizes are matched. The speedrun's [weak-direction test](../speedrun/README.md#does-muon-push-weak-directions-too-hard) found a slightly uneven update (S^0.25) best on a single task. With repeated changes, the even update wins.
+- **Consistency check.** 0 rounds and section 20's `nsgd` at lr 0.04 compute the same update along different code paths. They agree on tasks 7–12 (1.901 vs 1.909), though not bit for bit: after 500 steps the two runs match exactly, but by step 6000 seed 0 differs by 0.03 (1.904 vs 1.936). Runs that are breaking down are that sensitive to rounding.
