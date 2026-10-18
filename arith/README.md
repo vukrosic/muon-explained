@@ -412,3 +412,5 @@ Clipping does not remove the whole effect. At step 3000, h1's effective rank has
 - Gradient clipping caps that step.
 
 **What this suggests beyond this toy (untested):** a single loss spike can permanently remove capacity that only rare or later data would have used. The final loss on the common data recovers within about 60 steps, so the damage does not show up there.
+
+**In the character model** the same Adam unit death happens, but in the first 50 steps instead of at a mid-training spike, and Muon cannot revive those units. Details: [lmspike](../lmspike/README.md).
