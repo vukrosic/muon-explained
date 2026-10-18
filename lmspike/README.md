@@ -138,7 +138,7 @@ If 30× Muon's lr for 10 steps hurts and Adam-sized steps hurt, is Muon's own st
 |---|---|
 | 10 at 0.1× | 1.631 |
 | plain Muon | 1.627 |
-| 10 at 2× (25 steps) | 1.627 |
+| 25 at 2× | 1.627 |
 | **10 at 3×** | **1.622** |
 | 10 at 5× | 1.626 |
 | 10 at 10× | 1.628 |
