@@ -1,0 +1,14 @@
+ACT=gelu WD=1 FREQ2=0.55,0.3,0.12,0.03 LR_MULT=1 THREADS=1 SCHED=decay STEPS2=3000 DIAG=2 FOUT=../burst/quick3k.jsonl OPT=adam HID_LR=0.003 WARM=500 python3 forget.py models/bvfgelu_A_s1.pt adam_lr0.003_s1
+ACT=gelu WD=1 FREQ2=0.55,0.3,0.12,0.03 LR_MULT=1 THREADS=1 SCHED=decay STEPS2=3000 DIAG=2 FOUT=../burst/quick3k.jsonl OPT=adam HID_LR=0.003 WARM=500 python3 forget.py models/bvfgelu_A_s1__muon100_b0.pt burst_lr0.003_s1
+ACT=gelu WD=1 FREQ2=0.55,0.3,0.12,0.03 LR_MULT=1 THREADS=1 SCHED=decay STEPS2=3000 DIAG=2 FOUT=../burst/quick3k.jsonl OPT=adam HID_LR=0.001 WARM=500 python3 forget.py models/bvfgelu_A_s1.pt adam_lr0.001_s1
+ACT=gelu WD=1 FREQ2=0.55,0.3,0.12,0.03 LR_MULT=1 THREADS=1 SCHED=decay STEPS2=3000 DIAG=2 FOUT=../burst/quick3k.jsonl OPT=adam HID_LR=0.001 WARM=500 python3 forget.py models/bvfgelu_A_s1__muon100_b0.pt burst_lr0.001_s1
+ACT=gelu WD=1 FREQ2=0.55,0.3,0.12,0.03 LR_MULT=1 THREADS=1 SCHED=decay STEPS2=3000 DIAG=2 FOUT=../burst/quick3k.jsonl OPT=adam HID_LR=0.0003 WARM=500 python3 forget.py models/bvfgelu_A_s1.pt adam_lr0.0003_s1
+ACT=gelu WD=1 FREQ2=0.55,0.3,0.12,0.03 LR_MULT=1 THREADS=1 SCHED=decay STEPS2=3000 DIAG=2 FOUT=../burst/quick3k.jsonl OPT=adam HID_LR=0.0003 WARM=500 python3 forget.py models/bvfgelu_A_s1__muon100_b0.pt burst_lr0.0003_s1
+ACT=gelu WD=1 FREQ2=0.55,0.3,0.12,0.03 LR_MULT=1 THREADS=1 SCHED=decay STEPS2=3000 DIAG=2 FOUT=../burst/quick3k.jsonl OPT=muon MUON_LR=0.02 python3 forget.py models/bvfgelu_A_s1.pt muon_s1
+ACT=gelu WD=1 FREQ2=0.55,0.3,0.12,0.03 LR_MULT=1 THREADS=1 SCHED=decay STEPS2=3000 DIAG=2 FOUT=../burst/quick3k.jsonl OPT=adam HID_LR=0.003 WARM=500 python3 forget.py models/bvfgelu_A_s2.pt adam_lr0.003_s2
+ACT=gelu WD=1 FREQ2=0.55,0.3,0.12,0.03 LR_MULT=1 THREADS=1 SCHED=decay STEPS2=3000 DIAG=2 FOUT=../burst/quick3k.jsonl OPT=adam HID_LR=0.003 WARM=500 python3 forget.py models/bvfgelu_A_s2__muon100_b0.pt burst_lr0.003_s2
+ACT=gelu WD=1 FREQ2=0.55,0.3,0.12,0.03 LR_MULT=1 THREADS=1 SCHED=decay STEPS2=3000 DIAG=2 FOUT=../burst/quick3k.jsonl OPT=adam HID_LR=0.001 WARM=500 python3 forget.py models/bvfgelu_A_s2.pt adam_lr0.001_s2
+ACT=gelu WD=1 FREQ2=0.55,0.3,0.12,0.03 LR_MULT=1 THREADS=1 SCHED=decay STEPS2=3000 DIAG=2 FOUT=../burst/quick3k.jsonl OPT=adam HID_LR=0.001 WARM=500 python3 forget.py models/bvfgelu_A_s2__muon100_b0.pt burst_lr0.001_s2
+ACT=gelu WD=1 FREQ2=0.55,0.3,0.12,0.03 LR_MULT=1 THREADS=1 SCHED=decay STEPS2=3000 DIAG=2 FOUT=../burst/quick3k.jsonl OPT=adam HID_LR=0.0003 WARM=500 python3 forget.py models/bvfgelu_A_s2.pt adam_lr0.0003_s2
+ACT=gelu WD=1 FREQ2=0.55,0.3,0.12,0.03 LR_MULT=1 THREADS=1 SCHED=decay STEPS2=3000 DIAG=2 FOUT=../burst/quick3k.jsonl OPT=adam HID_LR=0.0003 WARM=500 python3 forget.py models/bvfgelu_A_s2__muon100_b0.pt burst_lr0.0003_s2
+ACT=gelu WD=1 FREQ2=0.55,0.3,0.12,0.03 LR_MULT=1 THREADS=1 SCHED=decay STEPS2=3000 DIAG=2 FOUT=../burst/quick3k.jsonl OPT=muon MUON_LR=0.02 python3 forget.py models/bvfgelu_A_s2.pt muon_s2
