@@ -70,7 +70,8 @@ torch.manual_seed(SEED)
 m = Net()
 if OUTBIAS:
     with torch.no_grad(): m.out.bias.copy_(torch.log(counts.clamp_min(1) / counts.sum()))
-g = torch.Generator().manual_seed(1000 + SEED)
+DSEED = int(os.environ.get("DSEED", SEED))                 # batch-order seed (default: same as SEED, which sets the init)
+g = torch.Generator().manual_seed(1000 + DSEED)
 probe_ix = torch.randint(0, len(val) - CTX - 1, (4096,), generator=torch.Generator().manual_seed(7))
 probe = val[probe_ix[:, None] + torch.arange(CTX)]
 hid = [m.inp.weight, m.h1.weight, m.h2.weight]
@@ -127,8 +128,8 @@ with torch.no_grad():
     dead.append([STEPS] + [round(float(((z > 0).sum(0) == 0).float().mean()), 4) for z in hidden(m, probe)])
 # spike: loss more than 1.0 above the median of the previous 50 steps
 spikes = [i for i in range(50, STEPS) if losses[i] > sorted(losses[i - 50:i])[25] + 1.0]
-print(f"{ACT} {f'hid {HID} ' if HID != 512 else ''}{f'mwd {MWD:g} ' if MWD else ''}{f'wd {WD:g} ' if WD else ''}{f'steps {STEPS} ' if STEPS != 1000 else ''}{'outbias ' if OUTBIAS else ''}{f'cap {CAP:g} ' if CAP else ''}{f'early {EARLY_N}x{EARLY_MULT:g} ' if EARLY_N else ''}{f'warm_hid {WARM_HID} ' if WARM_HID else ''}{'reset ' if RESET2 else ''}{f'lr1 {LR1:g} ' if LR1 else ''}{OPT}{f'(lr {MUON_LR:g})->{OPT2}@{SWITCH}' if SWITCH else ''} warm {WARM} emb {EMB_LR:g} lr {HID_LR:g} clip {CLIP:g} b2 {B2:g} seed {SEED}: val {v:.4f} rare {vr:.4f}  spikes {len(spikes)} {spikes[:6]}"
+print(f"{ACT} {f'hid {HID} ' if HID != 512 else ''}{f'mwd {MWD:g} ' if MWD else ''}{f'wd {WD:g} ' if WD else ''}{f'steps {STEPS} ' if STEPS != 1000 else ''}{'outbias ' if OUTBIAS else ''}{f'cap {CAP:g} ' if CAP else ''}{f'early {EARLY_N}x{EARLY_MULT:g} ' if EARLY_N else ''}{f'warm_hid {WARM_HID} ' if WARM_HID else ''}{'reset ' if RESET2 else ''}{f'lr1 {LR1:g} ' if LR1 else ''}{OPT}{f'(lr {MUON_LR:g})->{OPT2}@{SWITCH}' if SWITCH else ''} warm {WARM} emb {EMB_LR:g} lr {HID_LR:g} clip {CLIP:g} b2 {B2:g} seed {SEED}{f' data {DSEED}' if DSEED != SEED else ''}: val {v:.4f} rare {vr:.4f}  spikes {len(spikes)} {spikes[:6]}"
       f"  gn max {max(gnorms):.1f}  dead end {dead[-1][1:]}", flush=True)
 with open(os.path.join(HERE, OUT), "a") as f:
-    f.write(json.dumps(dict(opt=OPT, act=ACT, switch=SWITCH, opt2=OPT2 if SWITCH else None, warm=WARM, warm2=WARM2, muon_lr=MUON_LR if SWITCH else None, lr1=LR1, reset2=RESET2, warm_hid=WARM_HID, hid_lr=HID_LR, emb_lr=EMB_LR, clip=CLIP, b2=B2, wd=WD, mwd=MWD, hid=HID, outbias=OUTBIAS, cap=CAP, early_n=EARLY_N, early_mult=EARLY_MULT, seed=SEED, steps=STEPS, val=round(v, 5),
+    f.write(json.dumps(dict(opt=OPT, act=ACT, switch=SWITCH, opt2=OPT2 if SWITCH else None, warm=WARM, warm2=WARM2, muon_lr=MUON_LR if SWITCH else None, lr1=LR1, reset2=RESET2, warm_hid=WARM_HID, hid_lr=HID_LR, emb_lr=EMB_LR, clip=CLIP, b2=B2, wd=WD, mwd=MWD, hid=HID, outbias=OUTBIAS, cap=CAP, early_n=EARLY_N, early_mult=EARLY_MULT, seed=SEED, dseed=DSEED, steps=STEPS, val=round(v, 5),
                             val_rare=round(vr, 5), n_rare_chars=int(rare.sum()), spikes=spikes, loss=losses, gnorm=gnorms, dead=dead, wstat=wstat)) + "\n")

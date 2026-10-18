@@ -237,5 +237,16 @@ Hidden width 512 → 1024 (`HID=1024`), GELU, 1000 steps, weight decay on both, 
 | **Muon lr 0.06, wd 0.05** | 1.6006 / 1.5956 / 1.5958 / 1.6027 / 1.5978 / 1.5929 | **1.5976** | 0.004 |
 
 - **Muon is lower by 0.004 on the 6-seed mean, on 4 of 6 seeds.** At width 512 the lead was 0.007 (section 10). Doubling the width does not grow it.
-- **Adam's result depends far more on the seed.** Its best and worst seeds are 0.037 apart, Muon's 0.010. Adam's seed 2 (1.5801) is the best single run here; without it Muon wins on 5 of 5. Width 512 shows the same at 1000 steps (Adam seeds 0.019 apart, Muon 0.003), but not at 3000 steps (both 0.014).
+- **Adam's result depends far more on the seed.** Its best and worst seeds are 0.037 apart, Muon's 0.010. Adam's seed 2 (1.5801) is the best single run here; without it Muon wins on 5 of 5. Width 512 shows the same at 1000 steps (Adam seeds 0.019 apart, Muon 0.003), but not at 3000 steps (Adam 0.014, Muon 0.016).
 - **Muon's best lr rose with width** (0.03–0.04 → 0.05–0.06): its update has the same total strength per matrix, so each weight gets a smaller share in a wider matrix. **Adam's best lr fell** (0.003 → 0.002).
+
+**Where Adam's seed spread comes from.** The seed sets both the starting weights and the batch order; `DSEED` separates them. Adam lr 0.002, width 1024:
+
+| starting weights \ batch order | data 2 | data 4 | other |
+|---|---|---|---|
+| init 2 | **1.5801** | 1.5997 | 1.5966 (data 6) |
+| init 4 | 1.6041 | 1.6166 | 1.6049 (data 8) |
+| init 6 / 8 | 1.5977 (init 6) | 1.6134 (init 8) | |
+| Muon lr 0.06, init 2 / 4 | 1.5958 / 1.5923 | 1.6040 / 1.5978 | |
+
+Both halves matter: init 2 beats init 4 with every batch order, and data 2 beats data 4 with every init. The 1.5801 run is the good init paired with the good batch order, 0.017 below the next-best mixed run. Across seeds, a higher stable rank of the first hidden matrix at step 24 goes with a lower final loss (correlation −0.95 over the 6 seeds; 15 for the best run, 10 for the two worst), but that is a correlation over 6 runs, not a tested cause.
