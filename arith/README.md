@@ -598,3 +598,62 @@ Effective rank of the h1 weight change over a whole phase (max 256), median over
 **In one line:** Adam reproduces the loss-of-plasticity picture (dead units, big weights, low rank, low-rank updates) and the standard fixes cure the collapse, but not the memorize-instead-of-generalize failure; Muon shows none of these signs, and its spread-out updates disturb untouched answers 2–4× less. Forgetting between different ops is not confined to the top layers in either.
 
 **Limits.** One tiny model, one task family, 2–4 seeds. One setting per fix (CBP rate 0.001, SP 0.4/0.4), not tuned. Continual backprop was not run under Muon. The similarity test varies labels, not inputs as in Ramasesh et al. The paper numbers quoted are from their abstracts and main results.
+
+## Muon burst vs published Adam fixes
+
+**Question.** [Above](#is-it-the-trained-network-or-the-optimizer-that-follows-swap-them), 100 Muon steps before Adam let an Adam-trained model learn ×. Do the published fixes for Adam's lost plasticity do the same, or better?
+
+**Setup** ([forget.py](forget.py), results in [burst_vs_fixes.jsonl](burst_vs_fixes.jsonl) and [burst_vs_fixes_gelu.jsonl](burst_vs_fixes_gelu.jsonl)). Same task as [above](#can-a-trained-model-learn-a-new-op-adam-no-muon-yes): phase 1 trains + and − only, 9000 Adam steps. Phase 2 adds × at 12% of each batch and trains 9000 Adam steps, full lr for half, then linear to 0. 2 starting seeds × 4 batch orders = 8 runs per row. Phase 1 was rerun with its Adam state saved, so fixes can keep or change it; it matches the earlier phase-1 models exactly. Fixes are applied once, at the start of phase 2:
+
+- **keep Adam state** (no fix): continue with phase 1's moment estimates.
+- **fresh model**: phase 2 from an untrained model (the target).
+- **Muon burst**: 100 Muon steps on the phase-2 data, then Adam with fresh moments and lr warmup over 500 steps.
+- **Adam-Rel** ([Ellis et al. 2024](https://arxiv.org/abs/2412.17113)): keep the moments, restart Adam's step count at 0.
+- **reset moments** ([Asadi et al. 2023](https://arxiv.org/abs/2306.17833)): fresh Adam state, with and without 500-step warmup.
+- **β2 0.99 or 0.9** instead of 0.999 ([Lyle et al. 2023](https://arxiv.org/abs/2303.01486)).
+- **clip 1**: gradient norm clipped at 1.
+- **continual backprop** ([Dohare et al. 2024](https://arxiv.org/abs/2306.13812)), one-shot: every h1 and h2 unit that is off on all × training inputs gets fresh input weights and zero output weights (ReLU: 234 of 256 h1 units, 71 of 256 h2). Once with the old Adam state, once with fresh moments + warmup.
+
+"Off" = share of h1 units whose input is ≤ 0 on every held-out × pair, at phase-2 steps 0, 100 and 1000. Every row ends with + and − held-out at 1.00 unless noted.
+
+**ReLU** (8 runs per row):
+
+| phase 2 | × held-out: range, mean, runs > 0.2 | × train | h1 off: step 0 / 100 / 1000 |
+|---|---|---|---|
+| keep Adam state (no fix) | 0.02–0.03, 0.02, 0 of 8 | 0.02–0.05 | 0.89–0.91 / 0.98–0.99 / 0.97–1.00 |
+| keep Adam state, warmup 500 | 0.02–0.03, 0.03, 0 of 8 | 0.02–0.04 | 0.89–0.91 / 0.90–0.96 / 0.96–1.00 |
+| fresh model | 0.03–0.91, **0.61**, 7 of 8 | 0.04–1.00 | 0.00 / 0.12–0.17 / 0.09–0.13 |
+| **Muon burst** (100 steps) + Adam, warmup 500 | **0.26–0.34, 0.30, 8 of 8** | **1.00** | 0.89–0.91 → 0.00 after Muon / 0.00–0.01 / 0.04–0.20 |
+| Adam-Rel | 0.02–0.04, 0.03, 0 of 8 | 0.02–0.05 | 0.89–0.91 / 0.89–0.93 / 0.89–0.97 |
+| reset moments | 0.02–0.03, 0.03, 0 of 8 | 0.02–0.04 | 0.89–0.91 / 0.91–1.00 / 0.92–0.98 |
+| reset moments, warmup 500 | 0.02–0.03, 0.03, 0 of 8 | 0.02–0.04 | 0.89–0.91 / 0.90–0.94 / 0.94–1.00 |
+| β2 0.99 | 0.03–0.04, 0.03, 0 of 8 | 0.03–0.06 | 0.89–0.91 / 0.94–1.00 / 0.94–0.98 |
+| β2 0.9 | 0.03, 0.03, 0 of 8 | 0.03–0.04 | 0.89–0.91 / 0.93–1.00 / 0.96–1.00 |
+| clip 1 | 0.02–0.03, 0.02, 0 of 8 | 0.02–0.03 | 0.89–0.91 / 0.96–0.99 / 0.95–1.00 |
+| continual backprop, old Adam state | 0.03–0.04, 0.03, 0 of 8 | 0.03–0.07 | 0.00 / 0.93–0.99 / 0.90–1.00 |
+| continual backprop, reset moments, warmup 500 | 0.04–0.16, 0.09, 0 of 8 | 0.09–0.59 | 0.00 / 0.00 / 0.59–0.81 |
+
+Reset moments with warmup ends with + and − at 0.06 in 1 of 8 runs (s2, order 1).
+
+**GELU** (phase 1 and 2 both with GELU; the burst, the two best other fixes and the moment-reset control, 8 runs per row):
+
+| phase 2 | × held-out: range, mean, runs > 0.2 | × train | h1 off: step 0 / 100 / 1000 |
+|---|---|---|---|
+| keep Adam state (no fix) | 0.03–0.07, 0.04, 0 of 8 | 0.04–0.21 | 0.02–0.06 / 0.87–0.98 / 0.92–1.00 |
+| fresh model | 0.46–0.99, **0.73**, 8 of 8 | 0.88–1.00 | 0.00 / 0.00–0.02 / 0.00–0.17 |
+| **Muon burst** (100 steps) + Adam, warmup 500 | **0.68–0.88, 0.76, 8 of 8** | **1.00** | 0.02–0.06 → 0.00 after Muon / 0.00 / 0.00–0.06 |
+| Adam-Rel | 0.03–0.06, 0.04, 0 of 8 | 0.04–0.13 | 0.02–0.06 / 0.26–0.61 / 0.04–0.97 |
+| reset moments, warmup 500 | 0.03–0.07, 0.05, 0 of 8 | 0.04–0.18 | 0.02–0.06 / 0.27–0.38 / 0.77–0.99 |
+| continual backprop, reset moments, warmup 500 | 0.03–0.15, 0.06, 0 of 8 | 0.05–0.30 | 0.00 / 0.23–0.36 / 0.72–0.97 |
+
+Under GELU, continual backprop resets only 6–19 h1 and 9–11 h2 units, because few units are off after phase 1.
+
+**What it means.**
+
+- **The burst is the only fix that works.** Under ReLU it lifts × from 0.02 to 0.26–0.34 in 8 of 8 runs. The best published fix, continual backprop with reset moments and warmup, reaches 0.04–0.16 (mean 0.09). Every other fix stays at 0.02–0.04, the same as no fix.
+- **Under GELU, the burst matches a fresh model.** × reaches 0.68–0.88 (mean 0.76) against 0.46–0.99 (mean 0.73) from fresh. Under ReLU it reaches half of fresh (0.30 vs 0.61).
+- **Muon is the part that matters, not the reset or the warmup.** The burst row restarts Adam with fresh moments and warmup. The same restart without the 100 Muon steps gives 0.02–0.03 (ReLU) and 0.03–0.07 (GELU). So Adam's moment estimates, named as a suspect in the [section above](#do-the-plasticity-fixes-work-for-adam-ops-sequence-2-seeds-03), are not the cause here.
+- **GELU does not avoid the problem; Adam creates it in phase 2.** After GELU phase 1, only 2–6% of h1 units are off on × inputs, not 89–91% as under ReLU. Within 100 Adam steps of phase 2, 87–98% are off. The burst keeps them on: 0.00–0.06 at step 1000.
+- **Waking units is not enough.** Continual backprop starts phase 2 with 0 units off under both activations. With the old Adam state they go off again within 100 steps. With reset moments and warmup they stay on to step 100, then 59–97% are off by step 1000. Under GELU, one Adam-Rel run ends with 0% off and × at 0.06.
+
+**Limits.** One tiny model, one op order, 2 starting seeds × 4 batch orders. Each fix uses one setting taken from its paper or chosen by hand, not tuned. Fixes are applied once at the start of phase 2; continual backprop and Adam-Rel were designed to run throughout training, which was not tested here (the [continual-learning test above](#do-the-plasticity-fixes-work-for-adam-ops-sequence-2-seeds-03) ran continual backprop every step on another task). The continual-backprop version with reset moments and warmup is an added row, not from the paper. Phase 2 is 9000 steps; the earlier 0.52–0.53 burst result used 18,000. Under GELU, "off" means a negative input, which still passes a small gradient, so it is not the same as a dead ReLU unit.

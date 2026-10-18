@@ -122,7 +122,8 @@ def main(p, order, seed):
         f"{op}({f:.0%}) train {a:.2f} test {b:.2f}" for op, f, a, b in zip(order, FREQ, end["train"], end["test"]))
         + f"   N={N} WD={WD:g}{' const' if CONST else ''} [{secs:.0f} s]", flush=True)
     if os.environ.get("SAVE"):                                  # keep the model and its split for cut.py; no log line
-        torch.save(dict(model=m.state_dict(), tr=tr, te=te, p=p, order=order, seed=seed), os.environ["SAVE"])
+        torch.save(dict(model=m.state_dict(), tr=tr, te=te, p=p, order=order, seed=seed, act=os.environ.get("ACT", "relu"),   # optimizer state: for forget.py OPT_STATE
+                        adam=adam.state_dict(), hid=hid.state_dict() if hid else None), os.environ["SAVE"])
         return
     with open(os.path.join(HERE, OUT), "a") as f:
         f.write(json.dumps(dict(opt=OPT, p=p, order=order, seed=seed, N=N, wd=WD, freq=FREQ, steps=STEPS, const=CONST, rare_pairs=RARE_PAIRS,

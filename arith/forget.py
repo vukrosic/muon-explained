@@ -5,6 +5,10 @@ Same optimizers as arith.py, fresh optimizer state, constant learning rate = LR_
 Usage: FREQ2=0.48,0.48,0,0.04 OPT=adam python3 forget.py MODEL.pt LABEL   -> forget.jsonl
 SAVE2=path keeps the result for a later relearn run. LIMIT=i:K trains op i on only its first K training pairs (relearning).
 FOUT names the jsonl. WARM=W: learning rate rises linearly from 0 over the first W steps. DIAG=i logs h1 effective rank and dead units on op i. ADD_AT=i:D keeps op i out of the batch until step D. RESET=emb,out,hid puts those parts back to a fresh init first. SP=lam,sig: shrink and perturb first, W = lam W + sig W_fresh on the 3 hidden matrices. KICK=K (OPT=adam): every K-th step the hidden matrices take one Muon step (lr MUON_LR x KICK_LR) instead of Adam. B2, EPS: Adam beta2 and eps (all Adam groups). CLIP=c: clip the total gradient norm to c. SCHED=decay: lr as in arith.py (full for half the steps, then linear to 0) instead of constant.
+OPT_STATE (OPT=adam, model saved with its Adam state): keep = continue with the old moments and step count; rel = Adam-Rel (Ellis et al. 2024),
+keep the moments but restart the step count at 0, so bias correction starts again. Default: fresh, empty moments (Asadi et al. 2023 reset).
+CBP=i: continual-backprop style reset first (Dohare et al. 2024): h1 and h2 units off on every training input of op i get fresh incoming
+weights and zero outgoing weights (the function is unchanged); their Adam moments are zeroed.
 """
 import json, os, sys
 import torch, torch.nn.functional as F
@@ -33,10 +37,32 @@ if os.environ.get("SP"):
 if os.environ.get("LIMIT"):
     i_lim, k_lim = map(int, os.environ["LIMIT"].split(":"))
     tr = [t[:k_lim] if i == i_lim else t for i, t in enumerate(tr)]
+n_cbp = None
+if os.environ.get("CBP"):
+    with torch.no_grad():
+        x_c = tr[int(os.environ["CBP"])][:, :3]; h0 = A.ACT(m.inp(m.emb(x_c).flatten(1))); p1 = m.h1(h0); p2 = m.h2(A.ACT(p1))
+        d1, d2 = p1.amax(0) <= 0, p2.amax(0) <= 0; fresh = A.Net()
+        m.h1.weight[d1] = fresh.h1.weight[d1]; m.h2.weight[d2] = fresh.h2.weight[d2]
+        m.h2.weight[:, d1] = 0; m.out.weight[:, d2] = 0
+    n_cbp = [int(d1.sum()), int(d2.sum())]
 muon = [m.inp.weight, m.h1.weight, m.h2.weight]
 B2, EPS, CLIP = float(os.environ.get("B2", 0.999)), float(os.environ.get("EPS", 1e-8)), float(os.environ.get("CLIP", 0))
 adam = torch.optim.AdamW([m.emb.weight, m.out.weight, m.out.bias], lr=A.ADAM_LR * LR_MULT, weight_decay=0, betas=(0.9, B2), eps=EPS)
 hid = torch.optim.AdamW(muon, lr=A.HID_LR * LR_MULT, weight_decay=A.WD, betas=(0.9, B2), eps=EPS) if A.OPT == "adam" else None
+OPT_STATE = os.environ.get("OPT_STATE", "fresh")
+if OPT_STATE != "fresh":
+    for o, sd in ((adam, ck["adam"]), (hid, ck["hid"])):
+        keep_opts = [{k: g[k] for k in ("betas", "eps", "weight_decay")} for g in o.param_groups]
+        o.load_state_dict(sd)
+        for g, kv in zip(o.param_groups, keep_opts):
+            g.update(kv)
+        for st in o.state.values():
+            if OPT_STATE == "rel":
+                st["step"].zero_()
+    if n_cbp:                                         # reset units start with empty moments
+        for w, sl in ((m.h1.weight, (d1,)), (m.h2.weight, (d2,)), (m.h2.weight, (slice(None), d1)), (m.out.weight, (slice(None), d2))):
+            st = (hid if w is not m.out.weight else adam).state[w]
+            st["exp_avg"][sl] = 0; st["exp_avg_sq"][sl] = 0
 mom = [torch.zeros_like(w) for w in muon]
 freq = torch.tensor(FREQ2)
 DECAYING = os.environ.get("SCHED") == "decay"
@@ -51,7 +77,7 @@ for step in range(STEPS2 + 1):
         if DIAG:                                      # h1: effective rank of the weight, share of units dead on op DIAG's inputs
             with torch.no_grad():
                 sv = torch.linalg.svdvals(m.h1.weight); q = sv / sv.sum()
-                xd = te[DIAG_OP][:, :3]; h = F.relu(m.h1(F.relu(m.inp(m.emb(xd).flatten(1)))))
+                xd = te[DIAG_OP][:, :3]; h = m.h1(A.ACT(m.inp(m.emb(xd).flatten(1))))   # pre-activation <= 0 everywhere: off
             log[-1].update(erank=round(torch.exp(-(q * q.log()).sum()).item(), 1), dead=round((h.amax(0) <= 0).float().mean().item(), 3))
     if step == STEPS2:
         break
@@ -91,5 +117,5 @@ if os.environ.get("SAVE2"):
     torch.save(dict(model=m.state_dict(), tr=full_tr, te=te, order=order, seed=seed), os.environ["SAVE2"])
 with open(os.path.join(A.HERE, os.environ.get("FOUT", "forget.jsonl")), "a") as f:
     f.write(json.dumps(dict(model=os.path.basename(path), label=label, order=order, seed=seed, opt=A.OPT, freq2=FREQ2, steps2=STEPS2,
-                            lr_mult=LR_MULT, sched="decay" if DECAYING else "const", wd=A.WD, limit=os.environ.get("LIMIT"), bseed=int(os.environ.get("BSEED", 0)), sp=os.environ.get("SP"), reset=os.environ.get("RESET"), add_at=os.environ.get("ADD_AT"), warm=WARM, kick=KICK, kick_lr=KICK_LR, b2=B2, eps=EPS, clip=CLIP, n_clipped=sum(g > CLIP for g in gstats) if CLIP else None,
+                            lr_mult=LR_MULT, sched="decay" if DECAYING else "const", wd=A.WD, limit=os.environ.get("LIMIT"), bseed=int(os.environ.get("BSEED", 0)), sp=os.environ.get("SP"), reset=os.environ.get("RESET"), add_at=os.environ.get("ADD_AT"), warm=WARM, kick=KICK, kick_lr=KICK_LR, b2=B2, eps=EPS, clip=CLIP, opt_state=OPT_STATE, cbp=os.environ.get("CBP"), n_cbp=n_cbp, act=os.environ.get("ACT", "relu"), n_clipped=sum(g > CLIP for g in gstats) if CLIP else None,
                             gnorm_pct=[round(sorted(gstats)[int(q * (len(gstats) - 1))], 3) for q in (0.5, 0.9, 0.99, 1.0)], log=log)) + "\n")
