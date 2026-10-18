@@ -174,7 +174,7 @@ GELU, embedding lr 0.01, 3 seeds, data in [lmbias.jsonl](lmbias.jsonl):
 
 The bias init is not allowed in the speedrun (only the optimizer may change there).
 
-## 10. Train 3× longer and Muon's lead is gone; with weight decay the two tie
+## 10. Train 3× longer and Muon's lead is gone; with GELU and weight decay Adam ends 0.003 lower
 
 Everything above is 1000 steps. Same model (GELU, embedding lr 0.01), now 3000 steps (lr still decays over the last 85%). Each optimizer's lr, and then its weight decay, was retuned at 3000 steps. Weight decay is multiplied by lr for both (AdamW's `weight_decay`; for Muon `MWD`, as in the speedrun). 3 seeds, data in [lmlong.jsonl](lmlong.jsonl).
 
@@ -189,10 +189,10 @@ Everything above is 1000 steps. Same model (GELU, embedding lr 0.01), now 3000 s
 - **Without weight decay the order flips.** At 1000 steps Muon wins by 0.010; at 3000 steps Adam wins by 0.0065, on all 3 seeds (1.5107 / 1.5075 / 1.5037 vs 1.5137 / 1.5196 / 1.5081). The first comparison at 3000 steps, with the 1000-step lrs, made it look larger (1.5265 vs 1.5335); both lrs had to drop.
 - **Weight decay is worth more than the optimizer.** At 3000 steps it gains 0.031 for Adam and 0.035 for Muon. Muon's weight decay window is narrow: 0.025 and 0.05 are good, 0.1 is worse than none (1.517).
 - **With weight decay, 1000 steps: Muon still leads on 3 of 3 seeds** (1.6214 / 1.6204 / 1.6186 vs 1.6380 / 1.6256 / 1.6190), though the last seed by only 0.0004.
-- **With weight decay, 3000 steps: a tie.** Adam is lower on all 3 seeds, by 0.0031, 0.0008 and 0.0024, inside the spread between neighboring settings (Adam lr 0.0025 to 0.004 all give 1.4768 to 1.4775).
+- **With weight decay, 3000 steps: Adam slightly ahead.** Adam is lower on all 3 seeds, by 0.0031, 0.0008 and 0.0024. Seeds 3–5 added for both best settings: Adam 1.4803 / 1.4699 / 1.4840, Muon 1.4822 / 1.4763 / 1.4888, so Adam is lower on 6 of 6 seeds; 6-seed means 1.4775 vs 1.4807, a gap of 0.003.
 - **The output-bias init from section 9 does not help at 3000 steps** (Adam 1.5238 vs 1.5265, Muon 1.5373 vs 1.5335, both at the old lrs without weight decay).
 
-So in this model Muon's advantage is a faster start, not a better end point. Sections 3, 7 and 8 found the start is where its lead is made; with a 3× budget Adam catches up. Not tested: longer than 3000 steps, wider models, or ReLU at 3000 steps.
+So in this model Muon's advantage is a faster start, not a better end point. Sections 3, 7 and 8 found the start is where its lead is made; with a 3× budget Adam catches up and passes it by a little. Not tested: longer than 3000 steps or wider models.
 
 ## 11. With ReLU, Muon still wins at 3000 steps, by 0.005
 
@@ -206,5 +206,21 @@ Same 3000-step setup as section 10, ReLU instead of GELU, weight decay on both. 
 | GELU for comparison: Adam / Muon, best (section 10) | 1.4768 / 1.4789 | | |
 
 - **Muon is lower on all 3 seeds**, by 0.0053, 0.0040 and 0.0054. At 1000 steps the ReLU gap was 0.021 (with warmup, no weight decay), so it shrinks with training but does not close, unlike GELU.
-- **Fits section 2:** units Adam kills at the start never come back, so even its best ReLU run trains with 6–11% fewer working units in layer 2 for all 3000 steps. More warmup kills fewer (500 steps: 3–6% dead) but ends no better (1.4962).
+- **Fits section 2:** units Adam kills at the start never come back, so even its best ReLU run trains with 6–11% fewer working units in layer 2 for all 3000 steps. More warmup kills fewer (500 steps: 2.5–6% dead) but ends no better (1.4962).
 - **GELU is the better choice for both here.** Adam gains 0.015 from it and Muon 0.008.
+
+## 12. Muon first, then Adam: no better than Adam alone
+
+If Muon's edge is the start and Adam's is the end, start with Muon and hand the hidden matrices to AdamW. GELU, 3000 steps, each phase with its best settings from section 10 (Muon lr 0.035, wd 0.05; AdamW lr 0.004, wd 0.3; fresh Adam state at the handoff, optionally a 100-step lr warmup after it). Data in [lmlong.jsonl](lmlong.jsonl).
+
+| 3000 steps, GELU | seeds 0–2 mean | seeds 0–5 mean |
+|---|---|---|
+| Adam all the way | 1.4768 | 1.4775 |
+| Muon all the way | 1.4789 | 1.4807 |
+| Muon 300 steps, then Adam | 1.4757 | |
+| Muon 300 steps, then Adam with 100-step warmup | 1.4746 | |
+| Muon 1000 steps, then Adam | 1.4753 | |
+| Muon 1000 steps, then Adam with 100-step warmup | 1.4741 | **1.4771** |
+
+- **Seeds 0–2 suggested a small gain; seeds 3–5 removed it.** Against Adam all the way, the last row is −0.0076, −0.0013, +0.0006, +0.0005, +0.0007, +0.0052 per seed: a tie.
+- So with GELU, Muon's faster start buys nothing that lasts once Adam has 2000 steps to train. The early advantage in sections 3 and 7 is real at 1000 steps and does not carry to the end of a longer run.
