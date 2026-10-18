@@ -170,6 +170,6 @@ GELU, embedding lr 0.01, 3 seeds, data in [lmbias.jsonl](lmbias.jsonl):
 - **Adam gains 0.007, Muon gains nothing.** Seed by seed, Adam minus Muon is +0.006, +0.003, −0.001: no longer a consistent gap.
 - **10 Adam steps at the start no longer cost anything** (1.627, same as Muon all the way).
 - **The early boost still helps Muon** (better on all 3 seeds), so it is not only undoing the rank-1 start.
-- **With ReLU it is not enough.** Adam still leaves 40% of layer 2 dead and ends at 1.716 (from 1.740), Muon 1.648.
+- **With ReLU it is not enough.** Adam still leaves 40% of layer 2 dead and ends at 1.716 (from 1.740), Muon 1.648. Adding hidden warmup 100 or 200: 1.669 (6–11% dead), so the ReLU gap stays at 0.021 (0.023 without the bias init).
 
 The bias init is not allowed in the speedrun (only the optimizer may change there).
