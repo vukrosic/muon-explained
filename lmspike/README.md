@@ -224,3 +224,18 @@ If Muon's edge is the start and Adam's is the end, start with Muon and hand the 
 
 - **Seeds 0–2 suggested a small gain; seeds 3–5 removed it.** Against Adam all the way, the last row is −0.0076, −0.0013, +0.0006, +0.0005, +0.0007, +0.0052 per seed: a tie.
 - So with GELU, Muon's faster start buys nothing that lasts once Adam has 2000 steps to train. The early advantage in sections 3 and 7 is real at 1000 steps and does not carry to the end of a longer run.
+
+## 13. Twice as wide (1024): Muon's 1000-step lead is 0.004 and Adam swings more between seeds
+
+Hidden width 512 → 1024 (`HID=1024`), GELU, 1000 steps, weight decay on both, lr and weight decay retuned. Data in [lmwide.jsonl](lmwide.jsonl).
+
+| width 1024, 1000 steps | seeds | mean | spread (sd) |
+|---|---|---|---|
+| Adam lr 0.0015 / 0.0025 / 0.003 (wd 0.15–0.3) | 3 each | 1.6039 / 1.6142 / 1.6230 | |
+| **Adam lr 0.002, wd 0.15** | 1.6053 / 1.5945 / 1.5801 / 1.6130 / 1.6166 / 1.5997 | 1.6016 | 0.013 |
+| Muon lr 0.04 / 0.05 / 0.08 (wd 0.05) | 3, 3, 2 | 1.6005 / 1.5966 / 1.6104 | |
+| **Muon lr 0.06, wd 0.05** | 1.6006 / 1.5956 / 1.5958 / 1.6027 / 1.5978 / 1.5929 | **1.5976** | 0.004 |
+
+- **Muon is lower by 0.004 on the 6-seed mean, on 4 of 6 seeds.** At width 512 the lead was 0.007 (section 10). Doubling the width does not grow it.
+- **Adam's result depends far more on the seed.** Its best and worst seeds are 0.037 apart, Muon's 0.010. Adam's seed 2 (1.5801) is the best single run here; without it Muon wins on 5 of 5. Width 512 shows the same at 1000 steps (Adam seeds 0.019 apart, Muon 0.003), but not at 3000 steps (both 0.014).
+- **Muon's best lr rose with width** (0.03–0.04 → 0.05–0.06): its update has the same total strength per matrix, so each weight gets a smaller share in a wider matrix. **Adam's best lr fell** (0.003 → 0.002).
