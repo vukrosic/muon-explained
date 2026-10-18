@@ -346,9 +346,9 @@ Section 16's change repeated: every 500 steps the characters are relabeled by a 
 | Adam | 1.791 | 1.803 | 1.852 | 1.897 | 1.856 | 2.114 | 1.916 | 1.898 | 1.990 | 1.924 | 1.951 | 1.940 |
 | Adam + fixes | 1.805 | 1.766 | 1.753 | 1.748 | 1.746 | 1.752 | 1.761 | 1.742 | 1.759 | 1.760 | 1.774 | 1.765 |
 
-- **Muon gets better after the first change and stays there.** Tasks 2–12 average 1.746, against 1.762 when fresh. No layer-2 unit dies in any run, and the largest gradient norm in 6000 steps is 7.
-- **Adam gets worse with every few changes.** Tasks 7–12 average 1.937, 0.15 above its fresh 1.791. 64–91% of layer 2 is dead at the end of each of those tasks, and gradient norms reach 78–204. Task 6 is the worst for all 3 seeds (2.10–2.13), but the same permutation costs Muon nothing (1.737–1.749).
-- **The section 16 fixes hold up over 12 changes.** Adam + fixes averages 1.760 over tasks 7–12, 0.012 above Muon, with at most 5% of layer 2 dead. Its first task is 0.014 worse than plain Adam, because the warmup and β2 0.95 cost something on a fresh 500-step run.
+- **Muon gets better after the first change and stays there.** Tasks 2–12 average 1.746, against 1.762 when fresh. Layer 3 has no dead units at the end of any task, layer 2 has 3–11% in tasks 7–12, and the largest gradient norm in 6000 steps is 7.
+- **Adam gets worse with every few changes.** Tasks 7–12 average 1.937, 0.15 above its fresh 1.791. 64–91% of layer 3 (the last hidden layer) is dead at the end of each of those tasks, and 6–22% of layer 2, and gradient norms reach 78–204. Task 6 is the worst for all 3 seeds (2.10–2.13), but the same permutation costs Muon nothing (1.737–1.749).
+- **The section 16 fixes hold up over 12 changes.** Adam + fixes averages 1.760 over tasks 7–12, 0.012 above Muon, with at most 5% of any layer dead. Its first task is 0.014 worse than plain Adam, because the warmup and β2 0.95 cost something on a fresh 500-step run.
 - **Muon may be drifting up slightly:** tasks 2–6 average 1.741, tasks 7–12 1.748. That difference is below the 0.01 seed spread, so it is not established.
 - **Limits.** One model, relabeling only (each new task is the same language under new names), 500 steps per task, lrs not retuned for the repeated setting.
 
@@ -369,6 +369,36 @@ Section 17's setup (a new relabeling every 500 steps, 12 tasks), with each combi
 | Muon, no fixes | | | 1.762 | 1.741 | 1.748 | 1.774 |
 
 - **Warmup and shrink are the pair that works.** Together: 1.774 on tasks 7–12, no dead units at the end, largest gradient norm 5.4. β2 0.95 adds another 0.014.
-- **Shrink without warmup is the worst setting tested.** Tasks 7–12 average 2.127, worse than no fix at all. Gradient norms reach 134–299, and 39–82% of layer 2 is dead at the end. Shrinking the weights by 0.7 while Adam's first steps keep their full size makes each step larger relative to the weights. That is the opposite of what the change needs.
+- **Shrink without warmup is the worst setting tested.** Tasks 7–12 average 2.127, worse than no fix at all. Gradient norms reach 134–299, and at the end 39–82% of layer 2 and 64–73% of layer 3 are dead. Shrinking the weights by 0.7 while Adam's first steps keep their full size makes each step larger relative to the weights. That is the opposite of what the change needs.
 - **Every setting without shrink degrades in the second half.** Warmup + β2 0.95 holds until task 6 (1.758), then drifts to 1.811 on tasks 7–12, with 45–50% of layer 3 dead at the end. Warmup protects each change, but something builds up across changes that only shrinking the weights removes.
 - **Muon needs none of this**, and stays 0.012 better than the best Adam combination.
+
+## 19. Deaths pile up from change to change, and shrinking clears them
+
+Why does shrinking the weights at each change work, when warmup and β2 0.95 alone break down after task 6 (section 18)? Same 12-task setup. Layers are numbered 1–3 from the input, as in section 1. Data in [lmshift12.jsonl](lmshift12.jsonl).
+
+**It is not the size of the weights.** Without shrinking, Adam's weights grow from Frobenius norm 21 to 36–42 per matrix over 12 tasks, despite weight decay 0.15. Shrinking keeps them at 18–23. But stronger weight decay, which also keeps them small, does not do the same job (warmup + β2 0.95 in every row, 2 seeds per new row):
+
+| Adam, warmup 100, β2 0.95 | norms at the end | tasks 2–6 | tasks 7–12 | layer 2 dead at the end |
+|---|---|---|---|---|
+| weight decay 0.15 | 36–42 | 1.758 | 1.811 | 2–8% (layer 3: 45–50%) |
+| weight decay 0.4 | 22–32 | 1.781 | 1.838 | 69–72% |
+| weight decay 0.8 | 16–20 | 1.774 | 1.816 | 38–43% |
+| weight decay 0.15, ×0.7 at each change | 18–23 | 1.752 | **1.760** | 0% |
+
+**What happens instead is a ratchet.** The share of dead units, sampled every 25 steps, seed 0, layer 2 / layer 3, at a given number of steps after the change:
+
+| run | task | at the change | +25 | +50 | +200 | +475 (end of task) |
+|---|---|---|---|---|---|---|
+| Adam, weight decay 0.8 | 4 | 16 / 0 | 22 / 0 | 25 / 0 | 20 / 0 | 16 / 0 |
+| | 7 | 38 / 0 | 50 / 0 | 49 / 0 | 37 / 0 | 28 / 0 |
+| | 10 | 33 / 0 | 58 / 0 | 59 / 0 | 43 / 0 | 32 / 0 |
+| Adam, weight decay 0.15 | 7 | 9 / 29 | 10 / 46 | 8 / 48 | 10 / 38 | 6 / 26 |
+| | 10 | 8 / 55 | 13 / 79 | 13 / 78 | 13 / 56 | 8 / 47 |
+| Adam, ×0.7 at each change | 7 | 0 / 0 | 0 / 7 | 0 / 1 | 0 / 0 | 0 / 0 |
+| | 10 | 0 / 0 | 0 / 9 | 0 / 1 | 0 / 0 | 0 / 0 |
+
+- **Each change kills units in the first 25–50 steps, and the rest of the task revives only part of them.** The leftovers carry into the next change, which kills more. With weight decay 0.8, layer 2 goes 0% → 16% → 38% → 33% dead at the start of tasks 2, 4, 7 and 10.
+- **With the shrink, the same burst still happens** (7–9% of layer 3 dead 25 steps after the change), **but it is gone by step 200**, so nothing carries over. One likely reason, not tested here: multiplying all three matrices by 0.7 shrinks layer 3's inputs as well as its weights, so every unit's input moves toward zero, where GELU passes gradient again.
+
+**Muon has a slow version of the same ratchet, and it does not matter.** Muon (3 seeds, no shrink) collects up to 8–11% dead in layer 2 from task 4 on, never any in layer 3. With ×0.7 or ×0.85 at each change (2 seeds each) layer 2 stays at most 4% dead, but the loss does not move: tasks 7–12 average 1.751 (×0.7) and 1.746 (×0.85) against 1.748 without. Muon's dead units cost nothing measurable, and the drift in section 17 (1.741 → 1.748) does not come from them.
