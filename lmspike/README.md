@@ -351,3 +351,24 @@ Section 16's change repeated: every 500 steps the characters are relabeled by a 
 - **The section 16 fixes hold up over 12 changes.** Adam + fixes averages 1.760 over tasks 7–12, 0.012 above Muon, with at most 5% of layer 2 dead. Its first task is 0.014 worse than plain Adam, because the warmup and β2 0.95 cost something on a fresh 500-step run.
 - **Muon may be drifting up slightly:** tasks 2–6 average 1.741, tasks 7–12 1.748. That difference is below the 0.01 seed spread, so it is not established.
 - **Limits.** One model, relabeling only (each new task is the same language under new names), 500 steps per task, lrs not retuned for the repeated setting.
+
+## 18. Which of Adam's three fixes matters over 12 changes
+
+Section 17's setup (a new relabeling every 500 steps, 12 tasks), with each combination of the three fixes: warmup over 100 steps after every change (`WARM_HID=100`), β2 0.95 (`B2=0.95`), weights ×0.7 at every change (`SHIFT_SHRINK=0.7`). 2 seeds per new row. Data in [lmshift12.jsonl](lmshift12.jsonl).
+
+| warmup | β2 0.95 | ×0.7 | task 1 | tasks 2–6 | tasks 7–12 | worst task (any seed) |
+|---|---|---|---|---|---|---|
+| | | | 1.791 | 1.904 | 1.937 | 2.126 |
+| ✓ | | | 1.800 | 1.811 | 1.892 | 1.950 |
+| | ✓ | | 1.802 | 1.868 | 1.899 | 2.093 |
+| | | ✓ | 1.798 | 1.874 | **2.127** | 2.632 |
+| ✓ | ✓ | | 1.805 | 1.758 | 1.811 | 1.892 |
+| | ✓ | ✓ | 1.802 | 1.782 | 1.897 | 2.007 |
+| ✓ | | ✓ | 1.800 | 1.765 | **1.774** | 1.811 |
+| ✓ | ✓ | ✓ | 1.802 | 1.752 | **1.760** | 1.818 |
+| Muon, no fixes | | | 1.762 | 1.741 | 1.748 | 1.774 |
+
+- **Warmup and shrink are the pair that works.** Together: 1.774 on tasks 7–12, no dead units at the end, largest gradient norm 5.4. β2 0.95 adds another 0.014.
+- **Shrink without warmup is the worst setting tested.** Tasks 7–12 average 2.127, worse than no fix at all. Gradient norms reach 134–299, and 39–82% of layer 2 is dead at the end. Shrinking the weights by 0.7 while Adam's first steps keep their full size makes each step larger relative to the weights. That is the opposite of what the change needs.
+- **Every setting without shrink degrades in the second half.** Warmup + β2 0.95 holds until task 6 (1.758), then drifts to 1.811 on tasks 7–12, with 45–50% of layer 3 dead at the end. Warmup protects each change, but something builds up across changes that only shrinking the weights removes.
+- **Muon needs none of this**, and stays 0.012 better than the best Adam combination.
